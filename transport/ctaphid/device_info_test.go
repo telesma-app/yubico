@@ -52,7 +52,7 @@ func TestGetDeviceInfo(t *testing.T) {
 		0x07, 1, 15,
 		0x08, 1, 0x40,
 		0x0a, 1, 1,
-		0x20, 2, 0xaa, 0xbb,
+		0x30, 2, 0xaa, 0xbb,
 	}
 	transport := &scriptedTransport{
 		response: lowlevel.VendorResponse{Data: payload},
@@ -70,7 +70,7 @@ func TestGetDeviceInfo(t *testing.T) {
 	assert.True(t, info.Locked)
 	assert.Equal(t, uint16(10), info.AutoEjectTimeout)
 	assert.Equal(t, byte(15), info.ChallengeResponseTimeout)
-	assert.Equal(t, []byte{0xaa, 0xbb}, info.UnknownFields[0x20])
+	assert.Equal(t, []byte{0xaa, 0xbb}, info.UnknownFields[0x30])
 
 	assert.Equal(t, CommandGetDeviceInfo, transport.command)
 	assert.Equal(t, []byte{0}, transport.data)

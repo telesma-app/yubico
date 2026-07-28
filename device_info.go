@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"unicode/utf8"
 )
 
 //go:generate go tool stringer -type=Capability,FormFactor -output=device_info_string.go
@@ -20,6 +21,30 @@ const (
 	CapabilityOATH    Capability = 0x0020
 	CapabilityHSMAuth Capability = 0x0100
 	CapabilityCTAP2   Capability = 0x0200
+)
+
+const (
+	tagUSBSupported     byte = 0x01
+	tagSerial           byte = 0x02
+	tagUSBEnabled       byte = 0x03
+	tagFormFactor       byte = 0x04
+	tagFirmwareVersion  byte = 0x05
+	tagAutoEjectTimeout byte = 0x06
+	tagChallengeTimeout byte = 0x07
+	tagDeviceFlags      byte = 0x08
+	tagLocked           byte = 0x0a
+	tagNFCSupported     byte = 0x0d
+	tagNFCEnabled       byte = 0x0e
+	tagMoreData         byte = 0x10
+	tagPartNumber       byte = 0x13
+	tagFIPSCapable      byte = 0x14
+	tagFIPSApproved     byte = 0x15
+	tagPinComplexity    byte = 0x16
+	tagNFCRestricted    byte = 0x17
+	tagResetBlocked     byte = 0x18
+	tagVersionQualifier byte = 0x19
+	tagFPSVersion       byte = 0x20
+	tagSTMVersion       byte = 0x21
 )
 
 // FirmwareVersion is the major.minor.build version reported by the device.
@@ -75,7 +100,14 @@ type DeviceInfo struct {
 	ChallengeResponseTimeout byte
 	DeviceFlags              byte
 	Locked                   bool
+	PartNumber               *string
+	FIPSCapable              Capability
+	FIPSApproved             Capability
 	PinComplexity            bool
+	NFCRestricted            bool
+	ResetBlocked             Capability
+	FPSVersion               *FirmwareVersion
+	STMVersion               *FirmwareVersion
 	SupportedNFCCapabilities *Capability
 	EnabledNFCCapabilities   *Capability
 	UnknownFields            map[byte][]byte
@@ -97,19 +129,27 @@ func ParseDeviceInfoPages(pages ...[]byte) (DeviceInfo, error) {
 	}
 
 	info := DeviceInfo{UnknownFields: make(map[byte][]byte)}
+	seen := make(map[byte]bool)
 	for _, data := range pages {
 		if len(data) == 0 || int(data[0]) != len(data)-1 {
 			return DeviceInfo{}, fmt.Errorf("%w: total length does not match payload", ErrInvalidDeviceInfo)
 		}
-		if err := parseDeviceInfoFields(&info, data[1:]); err != nil {
+		if err := parseDeviceInfoFields(&info, seen, data[1:]); err != nil {
 			return DeviceInfo{}, err
 		}
 	}
+	if !seen[tagUSBSupported] {
+		return DeviceInfo{}, fmt.Errorf("%w: missing supported USB capabilities", ErrInvalidDeviceInfo)
+	}
+	if seen[tagNFCSupported] != seen[tagNFCEnabled] {
+		return DeviceInfo{}, fmt.Errorf("%w: NFC capability fields must be present together", ErrInvalidDeviceInfo)
+	}
+	normalizeDeviceInfo(&info)
 
 	return info, nil
 }
 
-func parseDeviceInfoFields(info *DeviceInfo, fields []byte) error {
+func parseDeviceInfoFields(info *DeviceInfo, seen map[byte]bool, fields []byte) error {
 	for len(fields) > 0 {
 		if len(fields) < 2 || int(fields[1]) > len(fields)-2 {
 			return fmt.Errorf("%w: truncated TLV", ErrInvalidDeviceInfo)
@@ -117,95 +157,166 @@ func parseDeviceInfoFields(info *DeviceInfo, fields []byte) error {
 		tag, length := fields[0], int(fields[1])
 		value := fields[2 : 2+length]
 		fields = fields[2+length:]
+		seen[tag] = true
 
 		switch tag {
-		case 0x01:
+		case tagUSBSupported:
 			v, err := capability(tag, value)
 			if err != nil {
 				return err
 			}
 			info.SupportedUSBCapabilities = v
-		case 0x02:
+		case tagSerial:
 			if len(value) != 4 {
 				return fieldLengthError(tag, 4, len(value))
 			}
 			v := binary.BigEndian.Uint32(value)
 			info.Serial = &v
-		case 0x03:
+		case tagUSBEnabled:
 			v, err := capability(tag, value)
 			if err != nil {
 				return err
 			}
 			info.EnabledUSBCapabilities = v
-		case 0x04:
+		case tagFormFactor:
 			if len(value) != 1 {
 				return fieldLengthError(tag, 1, len(value))
 			}
 			info.FormFactor = FormFactor(value[0] & 0x0f)
+			if info.FormFactor > FormFactorUSBCBiometricKeychain {
+				info.FormFactor = FormFactorUnknown
+			}
 			info.IsFIPS = value[0]&0x80 != 0
 			info.IsSecurityKey = value[0]&0x40 != 0
-		case 0x05:
+		case tagFirmwareVersion:
 			if len(value) != 3 {
 				return fieldLengthError(tag, 3, len(value))
 			}
-			v := FirmwareVersion{value[0], value[1], value[2]}
-			info.FirmwareVersion = v
-		case 0x06:
+			info.FirmwareVersion = FirmwareVersion{value[0], value[1], value[2]}
+		case tagAutoEjectTimeout:
 			if len(value) != 2 {
 				return fieldLengthError(tag, 2, len(value))
 			}
 			v := binary.BigEndian.Uint16(value)
 			info.AutoEjectTimeout = v
-		case 0x07:
+		case tagChallengeTimeout:
 			if len(value) != 1 {
 				return fieldLengthError(tag, 1, len(value))
 			}
 			v := value[0]
 			info.ChallengeResponseTimeout = v
-		case 0x08:
+		case tagDeviceFlags:
 			if len(value) != 1 {
 				return fieldLengthError(tag, 1, len(value))
 			}
 			v := value[0]
 			info.DeviceFlags = v
-		case 0x0a:
+		case tagLocked:
 			if len(value) != 1 || value[0] > 1 {
 				return fmt.Errorf("%w: invalid locked field", ErrInvalidDeviceInfo)
 			}
 			v := value[0] == 1
 			info.Locked = v
-		case 0x0d:
+		case tagNFCSupported:
 			v, err := capability(tag, value)
 			if err != nil {
 				return err
 			}
 			info.SupportedNFCCapabilities = &v
-		case 0x0e:
+		case tagNFCEnabled:
 			v, err := capability(tag, value)
 			if err != nil {
 				return err
 			}
 			info.EnabledNFCCapabilities = &v
-		case 0x10:
+		case tagMoreData:
 			// Pagination metadata is consumed by the transport.
-		case 0x16:
+			if len(value) != 1 {
+				return fieldLengthError(tag, 1, len(value))
+			}
+		case tagPartNumber:
+			info.PartNumber = nil
+			if len(value) > 0 && utf8.Valid(value) {
+				v := string(value)
+				info.PartNumber = &v
+			}
+		case tagFIPSCapable:
+			v, err := fipsCapabilities(tag, value)
+			if err != nil {
+				return err
+			}
+			info.FIPSCapable = v
+		case tagFIPSApproved:
+			v, err := fipsCapabilities(tag, value)
+			if err != nil {
+				return err
+			}
+			info.FIPSApproved = v
+		case tagPinComplexity:
 			v, err := booleanField(tag, value)
 			if err != nil {
 				return err
 			}
 			info.PinComplexity = v
-		case 0x19:
+		case tagNFCRestricted:
+			v, err := booleanField(tag, value)
+			if err != nil {
+				return err
+			}
+			info.NFCRestricted = v
+		case tagResetBlocked:
+			v, err := capability(tag, value)
+			if err != nil {
+				return err
+			}
+			info.ResetBlocked = v
+		case tagVersionQualifier:
 			v, err := parseVersionQualifier(tag, value)
 			if err != nil {
 				return err
 			}
 			info.VersionQualifier = &v
+		case tagFPSVersion:
+			if len(value) != 3 {
+				return fieldLengthError(tag, 3, len(value))
+			}
+			info.FPSVersion = nil
+			v := FirmwareVersion{value[0], value[1], value[2]}
+			if v != (FirmwareVersion{}) {
+				info.FPSVersion = &v
+			}
+		case tagSTMVersion:
+			if len(value) != 3 {
+				return fieldLengthError(tag, 3, len(value))
+			}
+			info.STMVersion = nil
+			v := FirmwareVersion{value[0], value[1], value[2]}
+			if v != (FirmwareVersion{}) {
+				info.STMVersion = &v
+			}
 		default:
 			info.UnknownFields[tag] = append([]byte(nil), value...)
 		}
 	}
 
 	return nil
+}
+
+func normalizeDeviceInfo(info *DeviceInfo) {
+	version := info.EffectiveFirmwareVersion()
+
+	// YubiKey 4.2.4 reports its supported applications incorrectly.
+	if version == (FirmwareVersion{Major: 4, Minor: 2, Build: 4}) {
+		info.SupportedUSBCapabilities = Capability(0x003f)
+	}
+	// Enabled USB capabilities are not reliable on YubiKey 4 firmware.
+	if version.Major == 4 {
+		info.EnabledUSBCapabilities = 0
+	}
+	// YubiKey 4 FIPS devices identify themselves through their firmware range.
+	if version.Major == 4 && version.Minor == 4 {
+		info.IsFIPS = true
+	}
 }
 
 // EffectiveFirmwareVersion returns the version used for behavioral checks.
@@ -224,6 +335,32 @@ func capability(tag byte, value []byte) (Capability, error) {
 		return 0, fieldLengthError(tag, 2, len(value))
 	}
 	return Capability(binary.BigEndian.Uint16(value)), nil
+}
+
+func fipsCapabilities(tag byte, value []byte) (Capability, error) {
+	if len(value) != 2 {
+		return 0, fieldLengthError(tag, 2, len(value))
+	}
+
+	raw := binary.BigEndian.Uint16(value)
+	var capabilities Capability
+	if raw&(1<<0) != 0 {
+		capabilities |= CapabilityCTAP2
+	}
+	if raw&(1<<1) != 0 {
+		capabilities |= CapabilityPIV
+	}
+	if raw&(1<<2) != 0 {
+		capabilities |= CapabilityOpenPGP
+	}
+	if raw&(1<<3) != 0 {
+		capabilities |= CapabilityOATH
+	}
+	if raw&(1<<4) != 0 {
+		capabilities |= CapabilityHSMAuth
+	}
+
+	return capabilities, nil
 }
 
 func booleanField(tag byte, value []byte) (bool, error) {

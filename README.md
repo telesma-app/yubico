@@ -16,10 +16,20 @@ Pure-Go support for Yubico-specific device information and identity.
 - `yubico/transport/ctaphid` reads device information through Yubico's CTAPHID
   vendor command `0x42`, using
   [`github.com/go-ctap/ctap`](https://github.com/go-ctap/ctap).
+- `yubico/transport/pcsc` reads device information through the Yubico
+  management application on an exact PC/SC reader.
+- `yubico/resolver` identifies a smart-card target and distinguishes a missing
+  Yubico management application from transport or protocol failures.
 
 The CTAPHID transport accepts an existing vendor-command channel and does not
 take ownership of it. It sends logical command `0x42`; CTAPHID framing adds the
 init-packet bit, so the on-wire command byte is `0xc2`.
+
+The PC/SC management AID, commands and status handling follow Yubico's
+[Configuration Reference](https://developers.yubico.com/yubikey-manager/Config_Reference.html)
+and the official
+[`yubikey-manager`](https://github.com/Yubico/yubikey-manager)
+implementation.
 
 ## Installation
 

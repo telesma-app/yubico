@@ -21,9 +21,11 @@ Pure-Go support for Yubico-specific device information and identity.
 - `yubico/resolver` identifies a smart-card target and distinguishes a missing
   Yubico management application from transport or protocol failures.
 
-The CTAPHID transport accepts an existing vendor-command channel and does not
-take ownership of it. It sends logical command `0x42`; CTAPHID framing adds the
-init-packet bit, so the on-wire command byte is `0xc2`.
+The CTAPHID transport can open a FIDO HID collection by path and owns the
+resulting connection until `Close`. `GetDeviceInfo` also accepts an existing
+vendor-command channel without taking ownership of it. Both forms send logical
+command `0x42`; CTAPHID framing adds the init-packet bit, so the on-wire command
+byte is `0xc2`.
 
 The PC/SC management AID, commands and status handling follow Yubico's
 [Configuration Reference](https://developers.yubico.com/yubikey-manager/Config_Reference.html)

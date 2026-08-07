@@ -49,9 +49,9 @@ const (
 
 // FirmwareVersion is the major.minor.build version reported by the device.
 type FirmwareVersion struct {
-	Major byte
-	Minor byte
-	Build byte
+	Major byte `json:"major"`
+	Minor byte `json:"minor"`
+	Build byte `json:"build"`
 }
 
 // ReleaseType identifies the release stage of qualified firmware.
@@ -66,9 +66,9 @@ const (
 // VersionQualifier contains the behavioral firmware version reported by
 // development firmware.
 type VersionQualifier struct {
-	Version     FirmwareVersion
-	ReleaseType ReleaseType
-	Iteration   uint32
+	Version     FirmwareVersion `json:"version"`
+	ReleaseType ReleaseType     `json:"releaseType"`
+	Iteration   uint32          `json:"iteration"`
 }
 
 // FormFactor describes the physical shape and connector type of a YubiKey.
@@ -88,29 +88,29 @@ const (
 // DeviceInfo is returned by Yubico's GET DEVICE INFORMATION command.
 // UnknownFields preserves tags introduced by newer firmware.
 type DeviceInfo struct {
-	SupportedUSBCapabilities Capability
-	Serial                   *uint32
-	EnabledUSBCapabilities   Capability
-	FormFactor               FormFactor
-	IsFIPS                   bool
-	IsSecurityKey            bool
-	FirmwareVersion          FirmwareVersion
-	VersionQualifier         *VersionQualifier
-	AutoEjectTimeout         uint16
-	ChallengeResponseTimeout byte
-	DeviceFlags              byte
-	Locked                   bool
-	PartNumber               *string
-	FIPSCapable              Capability
-	FIPSApproved             Capability
-	PinComplexity            bool
-	NFCRestricted            bool
-	ResetBlocked             Capability
-	FPSVersion               *FirmwareVersion
-	STMVersion               *FirmwareVersion
-	SupportedNFCCapabilities *Capability
-	EnabledNFCCapabilities   *Capability
-	UnknownFields            map[byte][]byte
+	SupportedUSBCapabilities Capability        `json:"supportedUSBCapabilities"`
+	Serial                   *uint32           `json:"serial,omitempty"`
+	EnabledUSBCapabilities   Capability        `json:"enabledUSBCapabilities"`
+	FormFactor               FormFactor        `json:"formFactor"`
+	IsFIPS                   bool              `json:"isFIPS"`
+	IsSecurityKey            bool              `json:"isSecurityKey"`
+	FirmwareVersion          FirmwareVersion   `json:"firmwareVersion"`
+	VersionQualifier         *VersionQualifier `json:"versionQualifier,omitempty"`
+	AutoEjectTimeout         uint16            `json:"autoEjectTimeout"`
+	ChallengeResponseTimeout byte              `json:"challengeResponseTimeout"`
+	DeviceFlags              byte              `json:"deviceFlags"`
+	Locked                   bool              `json:"locked"`
+	PartNumber               *string           `json:"partNumber,omitempty"`
+	FIPSCapable              Capability        `json:"fipsCapable"`
+	FIPSApproved             Capability        `json:"fipsApproved"`
+	PinComplexity            bool              `json:"pinComplexity"`
+	NFCRestricted            bool              `json:"nfcRestricted"`
+	ResetBlocked             Capability        `json:"resetBlocked"`
+	FPSVersion               *FirmwareVersion  `json:"fpsVersion,omitempty"`
+	STMVersion               *FirmwareVersion  `json:"stmVersion,omitempty"`
+	SupportedNFCCapabilities *Capability       `json:"supportedNFCCapabilities,omitempty"`
+	EnabledNFCCapabilities   *Capability       `json:"enabledNFCCapabilities,omitempty"`
+	UnknownFields            map[byte][]byte   `json:"unknownFields"`
 }
 
 var ErrInvalidDeviceInfo = errors.New("yubico: invalid device information")

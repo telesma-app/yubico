@@ -6,8 +6,8 @@ import (
 	"slices"
 	"testing"
 
-	lowlevel "github.com/go-ctap/ctap/transport/ctaphid"
-	"github.com/go-ctap/yubico"
+	lowlevel "github.com/telesma-app/ctap/transport/ctaphid"
+	"github.com/telesma-app/yubico"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

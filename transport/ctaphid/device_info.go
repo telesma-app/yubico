@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 
-	lowlevel "github.com/go-ctap/ctap/transport/ctaphid"
-	"github.com/go-ctap/yubico"
+	lowlevel "github.com/telesma-app/ctap/transport/ctaphid"
+	"github.com/telesma-app/yubico"
 )
 
 // CommandGetDeviceInfo is Yubico's GET DEVICE INFORMATION command. Its

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/go-ctap/iso7816"
-	nativepcsc "github.com/go-ctap/pcsc"
-	"github.com/go-ctap/yubico"
+	"github.com/telesma-app/iso7816"
+	nativepcsc "github.com/telesma-app/pcsc"
+	"github.com/telesma-app/yubico"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

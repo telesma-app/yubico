@@ -6,8 +6,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/go-ctap/yubico"
-	yubicopcsc "github.com/go-ctap/yubico/transport/pcsc"
+	"github.com/telesma-app/yubico"
+	yubicopcsc "github.com/telesma-app/yubico/transport/pcsc"
 )
 
 // ErrNotApplicable reports that the exact smart-card target is not a Yubico

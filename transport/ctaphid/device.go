@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	lowlevel "github.com/go-ctap/ctap/transport/ctaphid"
-	hidapi "github.com/go-ctap/hid"
-	"github.com/go-ctap/yubico"
+	lowlevel "github.com/telesma-app/ctap/transport/ctaphid"
+	hidapi "github.com/telesma-app/hid"
+	"github.com/telesma-app/yubico"
 )
 
 // Device is a Yubico device connected through the CTAPHID protocol.

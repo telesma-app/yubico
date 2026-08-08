@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/go-ctap/yubico"
-	yubicopcsc "github.com/go-ctap/yubico/transport/pcsc"
+	"github.com/telesma-app/yubico"
+	yubicopcsc "github.com/telesma-app/yubico/transport/pcsc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

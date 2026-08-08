@@ -1,15 +1,15 @@
-module github.com/go-ctap/yubico
+module github.com/telesma-app/yubico
 
 go 1.26.3
 
 tool golang.org/x/tools/cmd/stringer
 
 require (
-	github.com/go-ctap/ctap v0.41.0
-	github.com/go-ctap/hid v0.10.1
-	github.com/go-ctap/iso7816 v0.1.0
-	github.com/go-ctap/pcsc v0.7.1
 	github.com/stretchr/testify v1.11.1
+	github.com/telesma-app/ctap v0.44.0
+	github.com/telesma-app/hid v0.12.0
+	github.com/telesma-app/iso7816 v0.2.0
+	github.com/telesma-app/pcsc v0.9.0
 )
 
 require (

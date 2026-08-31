@@ -98,35 +98,23 @@ func TestDeviceInfo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	{
-		want, got := "YubiKey 5 NFC", info.ModelName("")
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := info.ModelName(""), "YubiKey 5 NFC"; got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 	if got := info.Serial; got == nil {
 		t.Fatalf("got nil, want a non-nil value")
 	}
-	{
-		want, got := uint32(12345678), *info.Serial
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := *info.Serial, uint32(12345678); got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 	if got := card.steps; len(got) != 0 {
 		t.Errorf("got non-empty value %#v", got)
 	}
-	{
-		want, got := 1, card.begins
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := card.begins, 1; got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
-	{
-		want, got := 1, card.ends
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := card.ends, 1; got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 }
 
@@ -144,11 +132,8 @@ func TestDeviceInfoClassifiesMissingManagementApplication(t *testing.T) {
 			}}}
 
 			_, err := (&Device{card: card}).DeviceInfo(t.Context())
-			{
-				err, target := err, ErrManagementApplicationNotAvailable
-				if !errors.Is(err, target) {
-					t.Fatalf("got error %v, want errors.Is(error, %#v)", err, target)
-				}
+			if err, target := err, ErrManagementApplicationNotAvailable; !errors.Is(err, target) {
+				t.Fatalf("got error %v, want errors.Is(error, %#v)", err, target)
 			}
 		})
 	}
@@ -172,11 +157,8 @@ func TestDeviceInfoDoesNotClassifyReadFailureAsMissingApplication(
 	if err == nil {
 		t.Fatalf("expected an error")
 	}
-	{
-		err, target := err, ErrManagementApplicationNotAvailable
-		if errors.Is(err, target) {
-			t.Fatalf("got error %v, unexpectedly matches %#v", err, target)
-		}
+	if err, target := err, ErrManagementApplicationNotAvailable; errors.Is(err, target) {
+		t.Fatalf("got error %v, unexpectedly matches %#v", err, target)
 	}
 }
 

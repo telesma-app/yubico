@@ -49,28 +49,19 @@ func TestDeviceInfo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	{
-		want, got := yubico.Capability(0x023f), info.SupportedUSBCapabilities
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := info.SupportedUSBCapabilities, yubico.Capability(0x023f); got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 
 	written := rawDevice.writes.Bytes()
 	if got, want := len(written), reportSize; got != want {
 		t.Fatalf("got length %d, want %d", got, want)
 	}
-	{
-		want, got := byte(CommandGetDeviceInfo)|initPacketBit, written[5]
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := written[5], byte(CommandGetDeviceInfo)|initPacketBit; got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
-	{
-		want, got := cid[:], written[1:5]
-		if (got == nil) != (want == nil) || !bytes.Equal(got, want) {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := written[1:5], cid[:]; (got == nil) != (want == nil) || !bytes.Equal(got, want) {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 	if got, want := len(rawDevice.writeContexts), 1; got != want {
 		t.Fatalf("got length %d, want %d", got, want)
@@ -105,11 +96,8 @@ func TestOpenRejectsCanceledContext(t *testing.T) {
 
 	_, err := Open(ctx, "unused")
 
-	{
-		err, target := err, context.Canceled
-		if !errors.Is(err, target) {
-			t.Errorf("got error %v, want errors.Is(error, %#v)", err, target)
-		}
+	if err, target := err, context.Canceled; !errors.Is(err, target) {
+		t.Errorf("got error %v, want errors.Is(error, %#v)", err, target)
 	}
 }
 

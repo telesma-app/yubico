@@ -64,17 +64,11 @@ func TestGetDeviceInfo(t *testing.T) {
 	if got := info.Serial; got == nil {
 		t.Fatalf("got nil, want a non-nil value")
 	}
-	{
-		want, got := uint32(0x00123456), *info.Serial
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := *info.Serial, uint32(0x00123456); got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
-	{
-		want, got := yubico.Capability(0x023f), info.SupportedUSBCapabilities
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := info.SupportedUSBCapabilities, yubico.Capability(0x023f); got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 	{
 		want, got := yubico.FirmwareVersion{Major: 5, Minor: 7, Build: 1}, info.FirmwareVersion
@@ -82,11 +76,8 @@ func TestGetDeviceInfo(t *testing.T) {
 			t.Errorf("got %#v, want %#v", got, want)
 		}
 	}
-	{
-		want, got := yubico.FormFactorUSBCKeychain, info.FormFactor
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := info.FormFactor, yubico.FormFactorUSBCKeychain; got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 	if got := info.IsSecurityKey; !got {
 		t.Errorf("got false, want true")
@@ -97,17 +88,11 @@ func TestGetDeviceInfo(t *testing.T) {
 	if got := info.Locked; !got {
 		t.Errorf("got false, want true")
 	}
-	{
-		want, got := uint16(10), info.AutoEjectTimeout
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := info.AutoEjectTimeout, uint16(10); got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
-	{
-		want, got := byte(15), info.ChallengeResponseTimeout
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := info.ChallengeResponseTimeout, byte(15); got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 	{
 		want, got := []byte{0xaa, 0xbb}, info.UnknownFields[0x30]
@@ -116,11 +101,8 @@ func TestGetDeviceInfo(t *testing.T) {
 		}
 	}
 
-	{
-		want, got := CommandGetDeviceInfo, transport.command
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := transport.command, CommandGetDeviceInfo; got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 	{
 		want, got := []byte{0}, transport.data
@@ -164,11 +146,8 @@ func TestGetDeviceInfoReadsAdditionalPages(t *testing.T) {
 			t.Errorf("got %#v, want %#v", got, want)
 		}
 	}
-	{
-		want, got := yubico.Capability(0x023f), info.SupportedUSBCapabilities
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := info.SupportedUSBCapabilities, yubico.Capability(0x023f); got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 	if got := info.PinComplexity; !got {
 		t.Errorf("got false, want true")
@@ -181,10 +160,7 @@ func TestGetDeviceInfoPreservesTransportError(t *testing.T) {
 
 	_, err := GetDeviceInfo(t.Context(), transport)
 
-	{
-		err, target := err, transportErr
-		if !errors.Is(err, target) {
-			t.Errorf("got error %v, want errors.Is(error, %#v)", err, target)
-		}
+	if err, target := err, transportErr; !errors.Is(err, target) {
+		t.Errorf("got error %v, want errors.Is(error, %#v)", err, target)
 	}
 }

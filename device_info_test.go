@@ -39,11 +39,8 @@ func TestParseDeviceInfoAllowsOmittedAndRepeatedFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	{
-		want, got := FormFactorUSBCKeychain, info.FormFactor
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := info.FormFactor, FormFactorUSBCKeychain; got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 	if got := info.FirmwareVersion; !(got == FirmwareVersion{}) {
 		t.Errorf("got %#v, want zero value", got)
@@ -86,17 +83,11 @@ func TestParseDeviceInfoCurrentYubicoFields(t *testing.T) {
 			t.Errorf("got %#v, want %#v", got, want)
 		}
 	}
-	{
-		want, got := ReleaseTypeBeta, info.VersionQualifier.ReleaseType
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := info.VersionQualifier.ReleaseType, ReleaseTypeBeta; got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
-	{
-		want, got := uint32(3), info.VersionQualifier.Iteration
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := info.VersionQualifier.Iteration, uint32(3); got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 	{
 		want, got := FirmwareVersion{Major: 5, Minor: 8, Build: 0}, info.EffectiveFirmwareVersion()
@@ -110,11 +101,8 @@ func TestParseDeviceInfoCurrentYubicoFields(t *testing.T) {
 	if got := info.PartNumber; got == nil {
 		t.Fatalf("got nil, want a non-nil value")
 	}
-	{
-		want, got := "78CLUFX5000P", *info.PartNumber
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := *info.PartNumber, "78CLUFX5000P"; got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 	{
 		want, got := &FirmwareVersion{Major: 1}, info.FPSVersion
@@ -128,25 +116,14 @@ func TestParseDeviceInfoCurrentYubicoFields(t *testing.T) {
 			t.Errorf("got %#v, want %#v", got, want)
 		}
 	}
-	{
-		container, element := info.UnknownFields, byte(0x20)
-		_, ok := container[element]
-		if ok {
-			t.Errorf("value unexpectedly contains %#v", element)
-		}
+	if _, ok := info.UnknownFields[byte(0x20)]; ok {
+		t.Errorf("value unexpectedly contains %#v", byte(0x20))
 	}
-	{
-		container, element := info.UnknownFields, byte(0x21)
-		_, ok := container[element]
-		if ok {
-			t.Errorf("value unexpectedly contains %#v", element)
-		}
+	if _, ok := info.UnknownFields[byte(0x21)]; ok {
+		t.Errorf("value unexpectedly contains %#v", byte(0x21))
 	}
-	{
-		want, got := "YubiKey C Bio - FIDO Edition", info.ModelName("fallback")
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := info.ModelName("fallback"), "YubiKey C Bio - FIDO Edition"; got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 }
 
@@ -164,11 +141,8 @@ func TestParseDeviceInfoPages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	{
-		want, got := Capability(0x023f), info.SupportedUSBCapabilities
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := info.SupportedUSBCapabilities, Capability(0x023f); got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 	{
 		want, got := FirmwareVersion{Major: 5, Minor: 7, Build: 4}, info.FirmwareVersion
@@ -179,12 +153,8 @@ func TestParseDeviceInfoPages(t *testing.T) {
 	if got := info.PinComplexity; !got {
 		t.Errorf("got false, want true")
 	}
-	{
-		container, element := info.UnknownFields, byte(0x10)
-		_, ok := container[element]
-		if ok {
-			t.Errorf("value unexpectedly contains %#v", element)
-		}
+	if _, ok := info.UnknownFields[byte(0x10)]; ok {
+		t.Errorf("value unexpectedly contains %#v", byte(0x10))
 	}
 }
 
@@ -200,26 +170,17 @@ func TestParseDeviceInfoCurrentCapabilityFields(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	{
-		want, got := CapabilityCTAP2|CapabilityPIV|CapabilityOpenPGP|CapabilityOATH|CapabilityHSMAuth, info.FIPSCapable
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := info.FIPSCapable, CapabilityCTAP2|CapabilityPIV|CapabilityOpenPGP|CapabilityOATH|CapabilityHSMAuth; got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
-	{
-		want, got := CapabilityCTAP2|CapabilityPIV, info.FIPSApproved
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := info.FIPSApproved, CapabilityCTAP2|CapabilityPIV; got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 	if got := info.NFCRestricted; !got {
 		t.Errorf("got false, want true")
 	}
-	{
-		want, got := CapabilityCTAP2|CapabilityPIV, info.ResetBlocked
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := info.ResetBlocked, CapabilityCTAP2|CapabilityPIV; got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 }
 
@@ -232,11 +193,8 @@ func TestParseDeviceInfoNormalizesYubiKey4Fields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	{
-		want, got := Capability(0x003f), info.SupportedUSBCapabilities
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := info.SupportedUSBCapabilities, Capability(0x003f); got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 	if got := info.EnabledUSBCapabilities; !(got == 0) {
 		t.Errorf("got %#v, want zero value", got)
@@ -262,11 +220,8 @@ func TestParseDeviceInfoNormalizesUnknownFormFactor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	{
-		want, got := FormFactorUnknown, info.FormFactor
-		if got != want {
-			t.Errorf("got %#v, want %#v", got, want)
-		}
+	if got, want := info.FormFactor, FormFactorUnknown; got != want {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 	if got := info.IsSecurityKey; !got {
 		t.Errorf("got false, want true")
@@ -286,11 +241,8 @@ func TestFormFactorString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			{
-				want, got := tt.want, tt.form.String()
-				if got != want {
-					t.Errorf("got %#v, want %#v", got, want)
-				}
+			if got, want := tt.form.String(), tt.want; got != want {
+				t.Errorf("got %#v, want %#v", got, want)
 			}
 		})
 	}

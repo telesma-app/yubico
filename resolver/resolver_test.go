@@ -36,11 +36,8 @@ func TestResolveSmartCard(t *testing.T) {
 	opened := &fakeDevice{info: want}
 	resolver := NewLocal()
 	resolver.openPCSC = func(reader string) (device, error) {
-		{
-			want, got := "reader-one", reader
-			if got != want {
-				t.Errorf("got %#v, want %#v", got, want)
-			}
+		if got, want := reader, "reader-one"; got != want {
+			t.Errorf("got %#v, want %#v", got, want)
 		}
 		return opened, nil
 	}
@@ -74,11 +71,8 @@ func TestResolveSmartCardClassifiesMissingApplication(t *testing.T) {
 	}
 
 	_, err := resolver.ResolveSmartCard(t.Context(), "reader-one")
-	{
-		err, target := err, ErrNotApplicable
-		if !errors.Is(err, target) {
-			t.Fatalf("got error %v, want errors.Is(error, %#v)", err, target)
-		}
+	if err, target := err, ErrNotApplicable; !errors.Is(err, target) {
+		t.Fatalf("got error %v, want errors.Is(error, %#v)", err, target)
 	}
 	if got := errors.Is(
 		err,

@@ -3,12 +3,11 @@ package ctaphid
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 
 	lowlevel "github.com/telesma-app/ctap/transport/ctaphid"
 	"github.com/telesma-app/yubico"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -47,15 +46,43 @@ func TestDeviceInfo(t *testing.T) {
 	device := &Device{transport: lowlevel.NewTransport(rawDevice, cid)}
 
 	info, err := device.DeviceInfo(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, yubico.Capability(0x023f), info.SupportedUSBCapabilities)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	{
+		want, got := yubico.Capability(0x023f), info.SupportedUSBCapabilities
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
 
 	written := rawDevice.writes.Bytes()
-	require.Len(t, written, reportSize)
-	assert.Equal(t, byte(CommandGetDeviceInfo)|initPacketBit, written[5])
-	assert.Equal(t, cid[:], written[1:5])
-	require.Len(t, rawDevice.writeContexts, 1)
-	assert.Equal(t, "device-info", rawDevice.writeContexts[0].Value(contextKey{}))
+	if got, want := len(written), reportSize; got != want {
+		t.Fatalf("got length %d, want %d", got, want)
+	}
+	{
+		want, got := byte(CommandGetDeviceInfo)|initPacketBit, written[5]
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	{
+		want, got := cid[:], written[1:5]
+		if (got == nil) != (want == nil) || !bytes.Equal(got, want) {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	if got, want := len(rawDevice.writeContexts), 1; got != want {
+		t.Fatalf("got length %d, want %d", got, want)
+	}
+	{
+		want, got := "device-info", rawDevice.writeContexts[0].Value(contextKey{})
+		gotValue, ok := got.(string)
+
+		if !ok || gotValue != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
 }
 
 func TestClose(t *testing.T) {
@@ -64,8 +91,12 @@ func TestClose(t *testing.T) {
 		transport: lowlevel.NewTransport(rawDevice, lowlevel.ChannelID{}),
 	}
 
-	require.NoError(t, device.Close())
-	assert.True(t, rawDevice.closed)
+	if err := device.Close(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := rawDevice.closed; !got {
+		t.Errorf("got false, want true")
+	}
 }
 
 func TestOpenRejectsCanceledContext(t *testing.T) {
@@ -74,7 +105,12 @@ func TestOpenRejectsCanceledContext(t *testing.T) {
 
 	_, err := Open(ctx, "unused")
 
-	assert.ErrorIs(t, err, context.Canceled)
+	{
+		err, target := err, context.Canceled
+		if !errors.Is(err, target) {
+			t.Errorf("got error %v, want errors.Is(error, %#v)", err, target)
+		}
+	}
 }
 
 func newScriptedDevice(responses ...[]byte) *scriptedDevice {
@@ -90,16 +126,25 @@ func responseBytes(
 	t.Helper()
 
 	message, err := lowlevel.NewMessage(cid, command, data)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	var reports bytes.Buffer
 	_, err = message.WriteTo(&reports)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	encoded := reports.Bytes()
 	var response []byte
 	for len(encoded) > 0 {
-		require.GreaterOrEqual(t, len(encoded), reportSize)
+		{
+			got, limit := len(encoded), reportSize
+			if got < limit {
+				t.Fatalf("got %v, want greater than or equal to %v", got, limit)
+			}
+		}
 		response = append(response, encoded[1:reportSize]...)
 		encoded = encoded[reportSize:]
 	}

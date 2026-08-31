@@ -4,9 +4,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestParseDeviceInfoRejectsMalformedData(t *testing.T) {
@@ -23,8 +20,12 @@ func TestParseDeviceInfoRejectsMalformedData(t *testing.T) {
 	}
 	for _, data := range tests {
 		_, err := ParseDeviceInfo(data)
-		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrInvalidDeviceInfo))
+		if err == nil {
+			t.Fatalf("expected an error")
+		}
+		if got := errors.Is(err, ErrInvalidDeviceInfo); !got {
+			t.Errorf("got false, want true")
+		}
 	}
 }
 
@@ -35,9 +36,18 @@ func TestParseDeviceInfoAllowsOmittedAndRepeatedFields(t *testing.T) {
 		0x04, 1, 0x03,
 		0x30, 0,
 	})
-	require.NoError(t, err)
-	assert.Equal(t, FormFactorUSBCKeychain, info.FormFactor)
-	assert.Zero(t, info.FirmwareVersion)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	{
+		want, got := FormFactorUSBCKeychain, info.FormFactor
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	if got := info.FirmwareVersion; !(got == FirmwareVersion{}) {
+		t.Errorf("got %#v, want zero value", got)
+	}
 }
 
 func TestParseDeviceInfoCurrentYubicoFields(t *testing.T) {
@@ -47,25 +57,97 @@ func TestParseDeviceInfoCurrentYubicoFields(t *testing.T) {
 			"5546583530303050140200001502000016010017010018020000190e010305" +
 			"0800020101030400000003",
 	)
-	require.NoError(t, err)
-	require.LessOrEqual(t, len(fields), 255)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	{
+		got, limit := len(fields), 255
+		if got > limit {
+			t.Fatalf("got %v, want less than or equal to %v", got, limit)
+		}
+	}
 
 	info, err := ParseDeviceInfo(append([]byte{byte(len(fields))}, fields...))
-	require.NoError(t, err)
-	require.NotNil(t, info.VersionQualifier)
-	assert.Equal(t, FirmwareVersion{Major: 0, Minor: 0, Build: 1}, info.FirmwareVersion)
-	assert.Equal(t, FirmwareVersion{Major: 5, Minor: 8, Build: 0}, info.VersionQualifier.Version)
-	assert.Equal(t, ReleaseTypeBeta, info.VersionQualifier.ReleaseType)
-	assert.Equal(t, uint32(3), info.VersionQualifier.Iteration)
-	assert.Equal(t, FirmwareVersion{Major: 5, Minor: 8, Build: 0}, info.EffectiveFirmwareVersion())
-	assert.False(t, info.PinComplexity)
-	require.NotNil(t, info.PartNumber)
-	assert.Equal(t, "78CLUFX5000P", *info.PartNumber)
-	assert.Equal(t, &FirmwareVersion{Major: 1}, info.FPSVersion)
-	assert.Equal(t, &FirmwareVersion{Major: 3, Build: 1}, info.STMVersion)
-	assert.NotContains(t, info.UnknownFields, byte(0x20))
-	assert.NotContains(t, info.UnknownFields, byte(0x21))
-	assert.Equal(t, "YubiKey C Bio - FIDO Edition", info.ModelName("fallback"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := info.VersionQualifier; got == nil {
+		t.Fatalf("got nil, want a non-nil value")
+	}
+	{
+		want, got := FirmwareVersion{Major: 0, Minor: 0, Build: 1}, info.FirmwareVersion
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	{
+		want, got := FirmwareVersion{Major: 5, Minor: 8, Build: 0}, info.VersionQualifier.Version
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	{
+		want, got := ReleaseTypeBeta, info.VersionQualifier.ReleaseType
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	{
+		want, got := uint32(3), info.VersionQualifier.Iteration
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	{
+		want, got := FirmwareVersion{Major: 5, Minor: 8, Build: 0}, info.EffectiveFirmwareVersion()
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	if got := info.PinComplexity; got {
+		t.Errorf("got true, want false")
+	}
+	if got := info.PartNumber; got == nil {
+		t.Fatalf("got nil, want a non-nil value")
+	}
+	{
+		want, got := "78CLUFX5000P", *info.PartNumber
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	{
+		want, got := &FirmwareVersion{Major: 1}, info.FPSVersion
+		if got != want && (got == nil || want == nil || *got != *want) {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	{
+		want, got := &FirmwareVersion{Major: 3, Build: 1}, info.STMVersion
+		if got != want && (got == nil || want == nil || *got != *want) {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	{
+		container, element := info.UnknownFields, byte(0x20)
+		_, ok := container[element]
+		if ok {
+			t.Errorf("value unexpectedly contains %#v", element)
+		}
+	}
+	{
+		container, element := info.UnknownFields, byte(0x21)
+		_, ok := container[element]
+		if ok {
+			t.Errorf("value unexpectedly contains %#v", element)
+		}
+	}
+	{
+		want, got := "YubiKey C Bio - FIDO Edition", info.ModelName("fallback")
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
 }
 
 func TestParseDeviceInfoPages(t *testing.T) {
@@ -79,11 +161,31 @@ func TestParseDeviceInfoPages(t *testing.T) {
 			0x16, 1, 1,
 		},
 	)
-	require.NoError(t, err)
-	assert.Equal(t, Capability(0x023f), info.SupportedUSBCapabilities)
-	assert.Equal(t, FirmwareVersion{Major: 5, Minor: 7, Build: 4}, info.FirmwareVersion)
-	assert.True(t, info.PinComplexity)
-	assert.NotContains(t, info.UnknownFields, byte(0x10))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	{
+		want, got := Capability(0x023f), info.SupportedUSBCapabilities
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	{
+		want, got := FirmwareVersion{Major: 5, Minor: 7, Build: 4}, info.FirmwareVersion
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	if got := info.PinComplexity; !got {
+		t.Errorf("got false, want true")
+	}
+	{
+		container, element := info.UnknownFields, byte(0x10)
+		_, ok := container[element]
+		if ok {
+			t.Errorf("value unexpectedly contains %#v", element)
+		}
+	}
 }
 
 func TestParseDeviceInfoCurrentCapabilityFields(t *testing.T) {
@@ -94,15 +196,31 @@ func TestParseDeviceInfoCurrentCapabilityFields(t *testing.T) {
 		0x17, 1, 1,
 		0x18, 2, 0x02, 0x10,
 	})
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	assert.Equal(t,
-		CapabilityCTAP2|CapabilityPIV|CapabilityOpenPGP|CapabilityOATH|CapabilityHSMAuth,
-		info.FIPSCapable,
-	)
-	assert.Equal(t, CapabilityCTAP2|CapabilityPIV, info.FIPSApproved)
-	assert.True(t, info.NFCRestricted)
-	assert.Equal(t, CapabilityCTAP2|CapabilityPIV, info.ResetBlocked)
+	{
+		want, got := CapabilityCTAP2|CapabilityPIV|CapabilityOpenPGP|CapabilityOATH|CapabilityHSMAuth, info.FIPSCapable
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	{
+		want, got := CapabilityCTAP2|CapabilityPIV, info.FIPSApproved
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	if got := info.NFCRestricted; !got {
+		t.Errorf("got false, want true")
+	}
+	{
+		want, got := CapabilityCTAP2|CapabilityPIV, info.ResetBlocked
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
 }
 
 func TestParseDeviceInfoNormalizesYubiKey4Fields(t *testing.T) {
@@ -111,16 +229,29 @@ func TestParseDeviceInfoNormalizesYubiKey4Fields(t *testing.T) {
 		0x03, 2, 0x00, 0x20,
 		0x05, 3, 4, 2, 4,
 	})
-	require.NoError(t, err)
-	assert.Equal(t, Capability(0x003f), info.SupportedUSBCapabilities)
-	assert.Zero(t, info.EnabledUSBCapabilities)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	{
+		want, got := Capability(0x003f), info.SupportedUSBCapabilities
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	if got := info.EnabledUSBCapabilities; !(got == 0) {
+		t.Errorf("got %#v, want zero value", got)
+	}
 
 	info, err = ParseDeviceInfo([]byte{9,
 		0x01, 2, 0x00, 0x3f,
 		0x05, 3, 4, 4, 5,
 	})
-	require.NoError(t, err)
-	assert.True(t, info.IsFIPS)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := info.IsFIPS; !got {
+		t.Errorf("got false, want true")
+	}
 }
 
 func TestParseDeviceInfoNormalizesUnknownFormFactor(t *testing.T) {
@@ -128,9 +259,18 @@ func TestParseDeviceInfoNormalizesUnknownFormFactor(t *testing.T) {
 		0x01, 2, 0x02, 0x02,
 		0x04, 1, 0x4f,
 	})
-	require.NoError(t, err)
-	assert.Equal(t, FormFactorUnknown, info.FormFactor)
-	assert.True(t, info.IsSecurityKey)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	{
+		want, got := FormFactorUnknown, info.FormFactor
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	if got := info.IsSecurityKey; !got {
+		t.Errorf("got false, want true")
+	}
 }
 
 func TestFormFactorString(t *testing.T) {
@@ -146,7 +286,12 @@ func TestFormFactorString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, tt.form.String())
+			{
+				want, got := tt.want, tt.form.String()
+				if got != want {
+					t.Errorf("got %#v, want %#v", got, want)
+				}
+			}
 		})
 	}
 }

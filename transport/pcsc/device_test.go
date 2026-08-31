@@ -3,14 +3,13 @@ package pcsc
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/telesma-app/iso7816"
 	nativepcsc "github.com/telesma-app/pcsc"
 	"github.com/telesma-app/yubico"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -96,13 +95,39 @@ func TestDeviceInfo(t *testing.T) {
 	}}
 
 	info, err := (&Device{card: card}).DeviceInfo(t.Context())
-	require.NoError(t, err)
-	assert.Equal(t, "YubiKey 5 NFC", info.ModelName(""))
-	require.NotNil(t, info.Serial)
-	assert.Equal(t, uint32(12345678), *info.Serial)
-	assert.Empty(t, card.steps)
-	assert.Equal(t, 1, card.begins)
-	assert.Equal(t, 1, card.ends)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	{
+		want, got := "YubiKey 5 NFC", info.ModelName("")
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	if got := info.Serial; got == nil {
+		t.Fatalf("got nil, want a non-nil value")
+	}
+	{
+		want, got := uint32(12345678), *info.Serial
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	if got := card.steps; len(got) != 0 {
+		t.Errorf("got non-empty value %#v", got)
+	}
+	{
+		want, got := 1, card.begins
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	{
+		want, got := 1, card.ends
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
 }
 
 func TestDeviceInfoClassifiesMissingManagementApplication(t *testing.T) {
@@ -119,11 +144,12 @@ func TestDeviceInfoClassifiesMissingManagementApplication(t *testing.T) {
 			}}}
 
 			_, err := (&Device{card: card}).DeviceInfo(t.Context())
-			require.ErrorIs(
-				t,
-				err,
-				ErrManagementApplicationNotAvailable,
-			)
+			{
+				err, target := err, ErrManagementApplicationNotAvailable
+				if !errors.Is(err, target) {
+					t.Fatalf("got error %v, want errors.Is(error, %#v)", err, target)
+				}
+			}
 		})
 	}
 }
@@ -143,8 +169,15 @@ func TestDeviceInfoDoesNotClassifyReadFailureAsMissingApplication(
 	}}
 
 	_, err := (&Device{card: card}).DeviceInfo(t.Context())
-	require.Error(t, err)
-	require.NotErrorIs(t, err, ErrManagementApplicationNotAvailable)
+	if err == nil {
+		t.Fatalf("expected an error")
+	}
+	{
+		err, target := err, ErrManagementApplicationNotAvailable
+		if errors.Is(err, target) {
+			t.Fatalf("got error %v, unexpectedly matches %#v", err, target)
+		}
+	}
 }
 
 func apduResponse(data []byte, status iso7816.StatusWord) []byte {

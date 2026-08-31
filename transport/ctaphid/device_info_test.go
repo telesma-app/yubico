@@ -1,6 +1,7 @@
 package ctaphid
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"slices"
@@ -8,8 +9,6 @@ import (
 
 	lowlevel "github.com/telesma-app/ctap/transport/ctaphid"
 	"github.com/telesma-app/yubico"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type scriptedTransport struct {
@@ -59,22 +58,84 @@ func TestGetDeviceInfo(t *testing.T) {
 	}
 
 	info, err := GetDeviceInfo(ctx, transport)
-	require.NoError(t, err)
-	require.NotNil(t, info.Serial)
-	assert.Equal(t, uint32(0x00123456), *info.Serial)
-	assert.Equal(t, yubico.Capability(0x023f), info.SupportedUSBCapabilities)
-	assert.Equal(t, yubico.FirmwareVersion{Major: 5, Minor: 7, Build: 1}, info.FirmwareVersion)
-	assert.Equal(t, yubico.FormFactorUSBCKeychain, info.FormFactor)
-	assert.True(t, info.IsSecurityKey)
-	assert.False(t, info.IsFIPS)
-	assert.True(t, info.Locked)
-	assert.Equal(t, uint16(10), info.AutoEjectTimeout)
-	assert.Equal(t, byte(15), info.ChallengeResponseTimeout)
-	assert.Equal(t, []byte{0xaa, 0xbb}, info.UnknownFields[0x30])
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := info.Serial; got == nil {
+		t.Fatalf("got nil, want a non-nil value")
+	}
+	{
+		want, got := uint32(0x00123456), *info.Serial
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	{
+		want, got := yubico.Capability(0x023f), info.SupportedUSBCapabilities
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	{
+		want, got := yubico.FirmwareVersion{Major: 5, Minor: 7, Build: 1}, info.FirmwareVersion
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	{
+		want, got := yubico.FormFactorUSBCKeychain, info.FormFactor
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	if got := info.IsSecurityKey; !got {
+		t.Errorf("got false, want true")
+	}
+	if got := info.IsFIPS; got {
+		t.Errorf("got true, want false")
+	}
+	if got := info.Locked; !got {
+		t.Errorf("got false, want true")
+	}
+	{
+		want, got := uint16(10), info.AutoEjectTimeout
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	{
+		want, got := byte(15), info.ChallengeResponseTimeout
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	{
+		want, got := []byte{0xaa, 0xbb}, info.UnknownFields[0x30]
+		if (got == nil) != (want == nil) || !bytes.Equal(got, want) {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
 
-	assert.Equal(t, CommandGetDeviceInfo, transport.command)
-	assert.Equal(t, []byte{0}, transport.data)
-	assert.Equal(t, "device-info", transport.ctx.Value(contextKey{}))
+	{
+		want, got := CommandGetDeviceInfo, transport.command
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	{
+		want, got := []byte{0}, transport.data
+		if (got == nil) != (want == nil) || !bytes.Equal(got, want) {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	{
+		want, got := "device-info", transport.ctx.Value(contextKey{})
+		gotValue, ok := got.(string)
+
+		if !ok || gotValue != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
 }
 
 func TestGetDeviceInfoReadsAdditionalPages(t *testing.T) {
@@ -92,10 +153,26 @@ func TestGetDeviceInfoReadsAdditionalPages(t *testing.T) {
 	}
 
 	info, err := GetDeviceInfo(t.Context(), transport)
-	require.NoError(t, err)
-	assert.Equal(t, [][]byte{{0}, {1}}, transport.allData)
-	assert.Equal(t, yubico.Capability(0x023f), info.SupportedUSBCapabilities)
-	assert.True(t, info.PinComplexity)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	{
+		want, got := [][]byte{{0}, {1}}, transport.allData
+		if (got == nil) != (want == nil) || !slices.EqualFunc(got, want, func(got, want []byte) bool {
+			return (got == nil) == (want == nil) && bytes.Equal(got, want)
+		}) {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	{
+		want, got := yubico.Capability(0x023f), info.SupportedUSBCapabilities
+		if got != want {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	if got := info.PinComplexity; !got {
+		t.Errorf("got false, want true")
+	}
 }
 
 func TestGetDeviceInfoPreservesTransportError(t *testing.T) {
@@ -104,5 +181,10 @@ func TestGetDeviceInfoPreservesTransportError(t *testing.T) {
 
 	_, err := GetDeviceInfo(t.Context(), transport)
 
-	assert.ErrorIs(t, err, transportErr)
+	{
+		err, target := err, transportErr
+		if !errors.Is(err, target) {
+			t.Errorf("got error %v, want errors.Is(error, %#v)", err, target)
+		}
+	}
 }

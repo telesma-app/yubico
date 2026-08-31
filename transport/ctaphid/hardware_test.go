@@ -3,8 +3,6 @@ package ctaphid
 import (
 	"os"
 	"testing"
-
-	"github.com/stretchr/testify/require"
 )
 
 func TestHardware(t *testing.T) {
@@ -14,13 +12,19 @@ func TestHardware(t *testing.T) {
 	}
 
 	device, err := Open(t.Context(), path)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	t.Cleanup(func() {
-		require.NoError(t, device.Close())
+		if err := device.Close(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 	})
 
 	info, err := device.DeviceInfo(t.Context())
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	t.Logf("model: %s", info.ModelName(""))
 	t.Logf("firmware: %s", info.FirmwareVersion)
 }

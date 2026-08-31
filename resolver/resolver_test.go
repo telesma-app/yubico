@@ -2,13 +2,12 @@ package resolver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/telesma-app/yubico"
 	yubicopcsc "github.com/telesma-app/yubico/transport/pcsc"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type fakeDevice struct {
@@ -37,14 +36,33 @@ func TestResolveSmartCard(t *testing.T) {
 	opened := &fakeDevice{info: want}
 	resolver := NewLocal()
 	resolver.openPCSC = func(reader string) (device, error) {
-		assert.Equal(t, "reader-one", reader)
+		{
+			want, got := "reader-one", reader
+			if got != want {
+				t.Errorf("got %#v, want %#v", got, want)
+			}
+		}
 		return opened, nil
 	}
 
 	got, err := resolver.ResolveSmartCard(t.Context(), "reader-one")
-	require.NoError(t, err)
-	assert.Equal(t, want, got)
-	assert.True(t, opened.closed)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	{
+		want, got := want, got
+		gotJSON, gotErr := json.Marshal(got)
+		wantJSON, wantErr := json.Marshal(want)
+		if gotErr != nil || wantErr != nil {
+			t.Fatalf("marshal device info: got error %v, want error %v", gotErr, wantErr)
+		}
+		if string(gotJSON) != string(wantJSON) {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	}
+	if got := opened.closed; !got {
+		t.Errorf("got false, want true")
+	}
 }
 
 func TestResolveSmartCardClassifiesMissingApplication(t *testing.T) {
@@ -56,9 +74,16 @@ func TestResolveSmartCardClassifiesMissingApplication(t *testing.T) {
 	}
 
 	_, err := resolver.ResolveSmartCard(t.Context(), "reader-one")
-	require.ErrorIs(t, err, ErrNotApplicable)
-	require.False(t, errors.Is(
+	{
+		err, target := err, ErrNotApplicable
+		if !errors.Is(err, target) {
+			t.Fatalf("got error %v, want errors.Is(error, %#v)", err, target)
+		}
+	}
+	if got := errors.Is(
 		err,
 		yubicopcsc.ErrManagementApplicationNotAvailable,
-	))
+	); got {
+		t.Fatalf("got true, want false")
+	}
 }

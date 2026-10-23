@@ -15,6 +15,7 @@ func TestHardware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	t.Cleanup(func() {
 		if err := device.Close(); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -25,6 +26,7 @@ func TestHardware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	t.Logf("reported information: %+v", info)
 	t.Logf("firmware: %s", info.FirmwareVersion)
 }

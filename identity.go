@@ -65,6 +65,7 @@ func (info DeviceInfo) ModelName() (string, bool) {
 
 	name := strings.Join(parts, " ")
 	name = strings.Replace(name, "5 C", "5C", 1)
+
 	return strings.Replace(name, "5 A", "5A", 1), true
 }
 
@@ -108,6 +109,7 @@ func firmwareAtLeast(got, want FirmwareVersion) bool {
 	if got.Major != want.Major {
 		return got.Major > want.Major
 	}
+
 	if got.Minor != want.Minor {
 		return got.Minor > want.Minor
 	}
@@ -131,5 +133,6 @@ func (info DeviceInfo) EffectiveFirmwareVersion() FirmwareVersion {
 	if info.VersionQualifier != nil && (info.VersionQualifier.ReleaseType == ReleaseTypeAlpha || info.VersionQualifier.ReleaseType == ReleaseTypeBeta) {
 		return info.VersionQualifier.Version
 	}
+
 	return info.FirmwareVersion
 }

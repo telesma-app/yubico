@@ -59,10 +59,12 @@ func TestDeviceInfoModelName(t *testing.T) {
 func TestModelNamePreservesReportedFields(t *testing.T) {
 	raw := map[byte][]byte{4: {byte(FormFactorUSBCKeychain)}, 5: {5, 2, 3}}
 	caps := CapabilityCTAP2
+
 	info := DeviceInfo{FirmwareVersion: FirmwareVersion{Major: 5, Minor: 2, Build: 3}, FormFactor: FormFactorUSBCKeychain, SupportedNFCCapabilities: &caps, RawFields: raw}
 	if name, ok := info.ModelName(); !ok || name != "YubiKey 5C" {
 		t.Fatalf("model = %q, %v", name, ok)
 	}
+
 	if info.SupportedNFCCapabilities == nil || *info.SupportedNFCCapabilities != caps || info.RawFields[5][2] != 3 {
 		t.Fatal("model interpretation changed reported information")
 	}

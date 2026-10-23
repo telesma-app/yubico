@@ -39,17 +39,21 @@ func ReadDeviceInfo(ctx context.Context, transport VendorTransport) (yubico.Devi
 			if errors.As(err, &responseError) && responseError.ErrorCode == lowlevel.ERR_INVALID_CMD {
 				err = fmt.Errorf("%w: %w", yubico.ErrDeviceInfoNotSupported, err)
 			}
+
 			return yubico.DeviceInfo{}, fmt.Errorf("read Yubico device information over CTAPHID: %w", err)
 		}
 
 		pages = append(pages, response.Data)
+
 		more, err := moreDeviceInfoPages(response.Data)
 		if err != nil {
 			return yubico.DeviceInfo{}, err
 		}
+
 		if !more {
 			break
 		}
+
 		if page == 255 {
 			return yubico.DeviceInfo{}, fmt.Errorf("%w: pagination exceeds page 255", yubico.ErrInvalidDeviceInfo)
 		}
@@ -64,16 +68,20 @@ func moreDeviceInfoPages(data []byte) (bool, error) {
 	}
 
 	var more bool
+
 	for fields := data[1:]; len(fields) > 0; {
 		if len(fields) < 2 || int(fields[1]) > len(fields)-2 {
 			return false, fmt.Errorf("%w: truncated TLV", yubico.ErrInvalidDeviceInfo)
 		}
+
 		tag, length := fields[0], int(fields[1])
 		value := fields[2 : 2+length]
 		fields = fields[2+length:]
+
 		if tag != 0x10 {
 			continue
 		}
+
 		if len(value) != 1 || value[0] > 1 {
 			return false, fmt.Errorf("%w: invalid pagination field", yubico.ErrInvalidDeviceInfo)
 		}

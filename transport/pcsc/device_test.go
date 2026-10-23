@@ -54,8 +54,10 @@ func (c *scriptedCard) Transmit(
 	if len(c.steps) == 0 {
 		return nil, fmt.Errorf("unexpected APDU: %x", command)
 	}
+
 	step := c.steps[0]
 	c.steps = c.steps[1:]
+
 	if !bytes.Equal(command, step.command) {
 		return nil, fmt.Errorf(
 			"unexpected APDU: got %x, want %x",
@@ -63,6 +65,7 @@ func (c *scriptedCard) Transmit(
 			step.command,
 		)
 	}
+
 	return bytes.Clone(step.response), step.err
 }
 
@@ -108,21 +111,27 @@ func TestDeviceInfo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	if got := info.SupportedNFCCapabilities; got == nil || *got != nfc {
 		t.Errorf("reported NFC capabilities = %v, want %v", got, nfc)
 	}
+
 	if got := info.SerialNumber; got == nil {
 		t.Fatalf("got nil, want a non-nil value")
 	}
+
 	if got, want := *info.SerialNumber, uint32(12345678); got != want {
 		t.Errorf("got %#v, want %#v", got, want)
 	}
+
 	if got := card.steps; len(got) != 0 {
 		t.Errorf("got non-empty value %#v", got)
 	}
+
 	if got, want := card.begins, 1; got != want {
 		t.Errorf("got %#v, want %#v", got, want)
 	}
+
 	if got, want := card.ends, 1; got != want {
 		t.Errorf("got %#v, want %#v", got, want)
 	}
@@ -145,10 +154,12 @@ func TestDeviceInfoClassifiesMissingManagementApplication(t *testing.T) {
 			if err, target := err, ErrManagementApplicationNotAvailable; !errors.Is(err, target) {
 				t.Fatalf("got error %v, want errors.Is(error, %#v)", err, target)
 			}
+
 			var apduErr *iso7816.APDUError
 			if !errors.As(err, &apduErr) || apduErr.StatusWord() != status {
 				t.Fatalf("underlying APDU error lost: %v", err)
 			}
+
 			if card.ends != 1 || card.closed {
 				t.Fatalf("transaction ends = %d, card closed = %t", card.ends, card.closed)
 			}
@@ -174,12 +185,15 @@ func TestDeviceInfoDoesNotClassifyReadFailureAsMissingApplication(
 	if err == nil {
 		t.Fatalf("expected an error")
 	}
+
 	if err, target := err, ErrManagementApplicationNotAvailable; errors.Is(err, target) {
 		t.Fatalf("got error %v, unexpectedly matches %#v", err, target)
 	}
+
 	if !errors.Is(err, yubico.ErrDeviceInfoNotSupported) {
 		t.Fatalf("error = %v, want unsupported command", err)
 	}
+
 	var apduErr *iso7816.APDUError
 	if !errors.As(err, &apduErr) || apduErr.StatusWord() != 0x6d00 {
 		t.Fatalf("underlying APDU error lost: %v", err)
@@ -218,20 +232,25 @@ func TestDeviceInfoPreservesFailures(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			selectStep := test.selectStep
+
 			selectStep.command = selectManagementAPDU
 			if selectStep.response == nil && selectStep.err == nil {
 				selectStep.response = apduResponse(nil, iso7816.StatusSuccess)
 			}
+
 			readStep := test.readStep
+
 			readStep.command = deviceInfoPage0APDU
 			if readStep.response == nil && readStep.err == nil {
 				readStep.response = apduResponse(completeInfoPage(), iso7816.StatusSuccess)
 			}
+
 			card := &scriptedCard{
 				steps:    []cardStep{selectStep, readStep},
 				beginErr: test.beginErr,
 				endErr:   test.endErr,
 			}
+
 			_, err := (&Device{card: card}).DeviceInfo(t.Context())
 			if test.wantStatus != 0 {
 				var apduErr *iso7816.APDUError
@@ -241,9 +260,11 @@ func TestDeviceInfoPreservesFailures(t *testing.T) {
 			} else if !errors.Is(err, test.wantErr) {
 				t.Fatalf("error = %v, want %v", err, test.wantErr)
 			}
+
 			if errors.Is(err, ErrManagementApplicationNotAvailable) || errors.Is(err, yubico.ErrDeviceInfoNotSupported) {
 				t.Errorf("failure misclassified as unavailable: %v", err)
 			}
+
 			if card.ends != test.wantEnds || card.closed {
 				t.Fatalf("transaction ends = %d, want %d; closed = %t", card.ends, test.wantEnds, card.closed)
 			}
@@ -273,6 +294,7 @@ func TestDeviceInfoPagination(t *testing.T) {
 					response: apduResponse(page, iso7816.StatusSuccess),
 				})
 			}
+
 			info, err := (&Device{card: card}).DeviceInfo(t.Context())
 			if test.invalid {
 				if !errors.Is(err, yubico.ErrInvalidDeviceInfo) {
@@ -281,9 +303,11 @@ func TestDeviceInfoPagination(t *testing.T) {
 			} else if err != nil {
 				t.Fatal(err)
 			}
+
 			if err == nil && info.FirmwareVersion != (yubico.FirmwareVersion{Major: 5, Minor: 7, Build: 4}) {
 				t.Fatal("SELECT response replaced reported firmware")
 			}
+
 			if len(card.steps) != 0 || card.ends != 1 || card.closed {
 				t.Fatalf("unread steps = %d, transaction ends = %d, closed = %t", len(card.steps), card.ends, card.closed)
 			}
@@ -296,6 +320,7 @@ func TestDeviceClose(t *testing.T) {
 	if err := (&Device{card: card}).Close(); err != nil {
 		t.Fatal(err)
 	}
+
 	if !card.closed {
 		t.Fatal("owned PC/SC connection was not closed")
 	}
@@ -312,6 +337,7 @@ func (c *blockingCard) EndTransaction(nativepcsc.Disposition) error { return nil
 
 func (c *blockingCard) Transmit(ctx context.Context, _ []byte) ([]byte, error) {
 	close(c.started)
+
 	select {
 	case <-c.closed:
 		return nil, nativepcsc.ErrClosed
@@ -328,13 +354,16 @@ func (c *blockingCard) Close() error {
 func TestDeviceCloseInterruptsDeviceInfo(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
+
 	card := &blockingCard{started: make(chan struct{}), closed: make(chan struct{})}
 	device := &Device{card: card}
 	readResult := make(chan error, 1)
+
 	go func() {
 		_, err := device.DeviceInfo(ctx)
 		readResult <- err
 	}()
+
 	select {
 	case <-card.started:
 	case <-time.After(5 * time.Second):
@@ -343,6 +372,7 @@ func TestDeviceCloseInterruptsDeviceInfo(t *testing.T) {
 
 	closeResult := make(chan error, 1)
 	go func() { closeResult <- device.Close() }()
+
 	select {
 	case err := <-closeResult:
 		if err != nil {
@@ -351,6 +381,7 @@ func TestDeviceCloseInterruptsDeviceInfo(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Close waited for the blocked card I/O")
 	}
+
 	select {
 	case err := <-readResult:
 		if !errors.Is(err, nativepcsc.ErrClosed) {
@@ -376,13 +407,16 @@ func TestReadDeviceInfoBorrowsCard(t *testing.T) {
 				{command: deviceInfoPage0APDU, response: apduResponse(completeInfoPage(0x10, 1, 1), iso7816.StatusSuccess)},
 				{command: deviceInfoPage1APDU, response: apduResponse(infoPage(0x02, 4, 0, 0, 0, 1), test.status)},
 			}}
+
 			info, err := ReadDeviceInfo(t.Context(), card)
 			if !errors.Is(err, test.wantErr) {
 				t.Fatalf("error = %v, want %v", err, test.wantErr)
 			}
+
 			if err == nil && (info.SerialNumber == nil || *info.SerialNumber != 1 || info.FirmwareVersion != (yubico.FirmwareVersion{Major: 5, Minor: 7, Build: 4})) {
 				t.Fatalf("reported data = %#v", info)
 			}
+
 			if card.begins != 0 || card.ends != 0 || card.closed || len(card.steps) != 0 {
 				t.Fatalf("borrowed card: begin=%d end=%d closed=%t unread=%d", card.begins, card.ends, card.closed, len(card.steps))
 			}
@@ -401,5 +435,6 @@ func completeInfoPage(fields ...byte) []byte {
 		0x08, 1, 0,
 		0x0a, 1, 0,
 	}
+
 	return infoPage(append(base, fields...)...)
 }

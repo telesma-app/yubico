@@ -54,3 +54,9 @@ go vet ./...
 ```
 
 The test suite does not require hardware.
+
+Run golangci-lint v2 with the standard linters and `wsl_v5`:
+
+```sh
+golangci-lint run ./...
+```

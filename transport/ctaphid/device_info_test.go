@@ -32,6 +32,7 @@ func (t *scriptedTransport) Vendor(
 	if t.responses != nil {
 		return t.responses[data[0]], t.err
 	}
+
 	return t.response, t.err
 }
 
@@ -59,12 +60,15 @@ func TestReadDeviceInfo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	if got := info.SerialNumber; got == nil {
 		t.Fatalf("got nil, want a non-nil value")
 	}
+
 	if got, want := *info.SerialNumber, uint32(0x00123456); got != want {
 		t.Errorf("got %#v, want %#v", got, want)
 	}
+
 	if got, want := info.SupportedUSBCapabilities, yubico.Capability(0x023f); got != want {
 		t.Errorf("got %#v, want %#v", got, want)
 	}
@@ -74,21 +78,27 @@ func TestReadDeviceInfo(t *testing.T) {
 			t.Errorf("got %#v, want %#v", got, want)
 		}
 	}
+
 	if got, want := info.FormFactor, yubico.FormFactorUSBCKeychain; got != want {
 		t.Errorf("got %#v, want %#v", got, want)
 	}
+
 	if got := info.IsSecurityKey; !got {
 		t.Errorf("got false, want true")
 	}
+
 	if got := info.IsFIPS; got {
 		t.Errorf("got true, want false")
 	}
+
 	if got := info.Locked; !got {
 		t.Errorf("got false, want true")
 	}
+
 	if got, want := info.AutoEjectTimeout, uint16(10); got != want {
 		t.Errorf("got %#v, want %#v", got, want)
 	}
+
 	if got, want := info.ChallengeResponseTimeout, byte(15); got != want {
 		t.Errorf("got %#v, want %#v", got, want)
 	}
@@ -102,6 +112,7 @@ func TestReadDeviceInfo(t *testing.T) {
 	if got, want := transport.command, CommandGetDeviceInfo; got != want {
 		t.Errorf("got %#v, want %#v", got, want)
 	}
+
 	if got, want := transport.allData, [][]byte{{0}}; !slices.EqualFunc(got, want, bytes.Equal) {
 		t.Errorf("got %#v, want %#v", got, want)
 	}
@@ -147,9 +158,11 @@ func TestReadDeviceInfoReadsAdditionalPages(t *testing.T) {
 			t.Errorf("got %#v, want %#v", got, want)
 		}
 	}
+
 	if got, want := info.SupportedUSBCapabilities, yubico.Capability(0x023f); got != want {
 		t.Errorf("got %#v, want %#v", got, want)
 	}
+
 	if got := *info.PinComplexity; !got {
 		t.Errorf("got false, want true")
 	}
@@ -170,10 +183,12 @@ func TestReadDeviceInfoClassifiesProtocolErrors(t *testing.T) {
 	for _, code := range []lowlevel.Error{lowlevel.ERR_INVALID_CMD, lowlevel.ERR_CHANNEL_BUSY, 0xfe} {
 		protocolErr := &lowlevel.ErrorResponse{ErrorCode: code}
 		transport := &scriptedTransport{err: protocolErr}
+
 		_, err := ReadDeviceInfo(t.Context(), transport)
 		if got, want := errors.Is(err, yubico.ErrDeviceInfoNotSupported), code == lowlevel.ERR_INVALID_CMD; got != want {
 			t.Errorf("code %v: unsupported = %t, want %t", code, got, want)
 		}
+
 		var got *lowlevel.ErrorResponse
 		if !errors.As(err, &got) || got != protocolErr {
 			t.Errorf("code %v: underlying error lost: %v", code, err)
@@ -233,6 +248,7 @@ func TestReadDeviceInfoPagination(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			transport := &scriptedTransport{responses: test.responses}
+
 			_, err := ReadDeviceInfo(t.Context(), transport)
 			if test.invalid {
 				if !errors.Is(err, yubico.ErrInvalidDeviceInfo) {
@@ -241,6 +257,7 @@ func TestReadDeviceInfoPagination(t *testing.T) {
 			} else if err != nil {
 				t.Fatal(err)
 			}
+
 			if len(transport.allData) != test.wantPages {
 				t.Fatalf("pages = %v, want %d", transport.allData, test.wantPages)
 			}
@@ -255,11 +272,14 @@ func TestReadDeviceInfoReadsLastAddressablePage(t *testing.T) {
 	for i := 1; i < 255; i++ {
 		responses[byte(i)] = lowlevel.VendorResponse{Data: []byte{3, 0x10, 1, 1}}
 	}
+
 	responses[255] = lowlevel.VendorResponse{Data: []byte{0}}
+
 	transport := &scriptedTransport{responses: responses}
 	if _, err := ReadDeviceInfo(t.Context(), transport); err != nil {
 		t.Fatal(err)
 	}
+
 	if len(transport.allData) != 256 || transport.allData[255][0] != 255 {
 		t.Fatalf("did not read pages 0..255: %v", transport.allData)
 	}
@@ -280,6 +300,7 @@ func completeInfoPage(fields ...byte) []byte {
 		0x08, 1, 0,
 		0x0a, 1, 0,
 	}
+
 	return infoPage(append(base, fields...)...)
 }
 
@@ -288,7 +309,9 @@ func TestReadDeviceInfoRejectsContinuationAfterLastPage(t *testing.T) {
 	for page := 0; page <= 255; page++ {
 		responses[byte(page)] = lowlevel.VendorResponse{Data: []byte{3, 0x10, 1, 1}}
 	}
+
 	transport := &scriptedTransport{responses: responses}
+
 	_, err := ReadDeviceInfo(t.Context(), transport)
 	if !errors.Is(err, yubico.ErrInvalidDeviceInfo) || len(transport.allData) != 256 {
 		t.Fatalf("overflow: pages=%d, error=%v", len(transport.allData), err)

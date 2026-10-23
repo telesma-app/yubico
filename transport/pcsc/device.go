@@ -87,6 +87,7 @@ func ReadDeviceInfo(ctx context.Context, card iso7816.Card) (yubico.DeviceInfo, 
 	if err != nil {
 		return yubico.DeviceInfo{}, err
 	}
+
 	switch response.Status {
 	case 0x6999, 0x6a82, 0x6b00, 0x6d00:
 		return yubico.DeviceInfo{}, fmt.Errorf(
@@ -95,6 +96,7 @@ func ReadDeviceInfo(ctx context.Context, card iso7816.Card) (yubico.DeviceInfo, 
 			response.APDUError(),
 		)
 	}
+
 	if err := response.APDUError(); err != nil {
 		return yubico.DeviceInfo{}, err
 	}
@@ -112,21 +114,26 @@ func ReadDeviceInfo(ctx context.Context, card iso7816.Card) (yubico.DeviceInfo, 
 		if err != nil {
 			return yubico.DeviceInfo{}, err
 		}
+
 		if err := response.APDUError(); err != nil {
 			if response.Status == 0x6d00 {
 				err = fmt.Errorf("%w: %w", yubico.ErrDeviceInfoNotSupported, err)
 			}
+
 			return yubico.DeviceInfo{}, err
 		}
 
 		pages = append(pages, response.Data)
+
 		more, err := moreDeviceInfoPages(response.Data)
 		if err != nil {
 			return yubico.DeviceInfo{}, err
 		}
+
 		if !more {
 			break
 		}
+
 		if page == 255 {
 			return yubico.DeviceInfo{}, fmt.Errorf("%w: pagination exceeds page 255", yubico.ErrInvalidDeviceInfo)
 		}
@@ -139,18 +146,23 @@ func moreDeviceInfoPages(data []byte) (bool, error) {
 	if len(data) == 0 || int(data[0]) != len(data)-1 {
 		return false, yubico.ErrInvalidDeviceInfo
 	}
+
 	var more bool
+
 	for fields := data[1:]; len(fields) > 0; {
 		if len(fields) < 2 || int(fields[1]) > len(fields)-2 {
 			return false, yubico.ErrInvalidDeviceInfo
 		}
+
 		tag, length := fields[0], int(fields[1])
 		value := fields[2 : 2+length]
 		fields = fields[2+length:]
+
 		if tag == 0x10 {
 			if len(value) != 1 || value[0] > 1 {
 				return false, yubico.ErrInvalidDeviceInfo
 			}
+
 			more = value[0] == 1
 		}
 	}

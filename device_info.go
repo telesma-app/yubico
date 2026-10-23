@@ -148,10 +148,12 @@ func ParseDeviceInfoPages(pages ...[]byte) (DeviceInfo, error) {
 	}
 
 	info := DeviceInfo{RawFields: make(map[byte][]byte)}
+
 	for _, data := range pages {
 		if len(data) == 0 || int(data[0]) != len(data)-1 {
 			return DeviceInfo{}, fmt.Errorf("%w: total length does not match payload", ErrInvalidDeviceInfo)
 		}
+
 		if err := parseDeviceInfoFields(&info, data[1:]); err != nil {
 			return DeviceInfo{}, err
 		}
@@ -166,12 +168,15 @@ func ParseDeviceInfoPages(pages ...[]byte) (DeviceInfo, error) {
 			return DeviceInfo{}, fmt.Errorf("%w: missing required tag 0x%02x", ErrInvalidDeviceInfo, tag)
 		}
 	}
+
 	if info.EnabledUSBCapabilities == nil && info.FirmwareVersion.Major != 4 {
 		return DeviceInfo{}, fmt.Errorf("%w: missing required tag 0x%02x", ErrInvalidDeviceInfo, tagUSBEnabled)
 	}
+
 	if (info.SupportedNFCCapabilities == nil) != (info.EnabledNFCCapabilities == nil) {
 		return DeviceInfo{}, fmt.Errorf("%w: NFC capability fields must be present together", ErrInvalidDeviceInfo)
 	}
+
 	if info.VersionQualifier != nil {
 		for _, tag := range [...]byte{0x01, 0x02, 0x03} {
 			if _, ok := info.VersionQualifier.RawFields[tag]; !ok {
@@ -188,6 +193,7 @@ func parseDeviceInfoFields(info *DeviceInfo, fields []byte) error {
 		if len(fields) < 2 || int(fields[1]) > len(fields)-2 {
 			return fmt.Errorf("%w: truncated TLV", ErrInvalidDeviceInfo)
 		}
+
 		tag, length := fields[0], int(fields[1])
 		value := fields[2 : 2+length]
 		fields = fields[2+length:]
@@ -199,11 +205,13 @@ func parseDeviceInfoFields(info *DeviceInfo, fields []byte) error {
 			if err != nil {
 				return err
 			}
+
 			info.SupportedUSBCapabilities = v
 		case tagSerial:
 			if len(value) != 4 {
 				return fieldLengthError(tag, 4, len(value))
 			}
+
 			v := binary.BigEndian.Uint32(value)
 			info.SerialNumber = &v
 		case tagUSBEnabled:
@@ -211,11 +219,13 @@ func parseDeviceInfoFields(info *DeviceInfo, fields []byte) error {
 			if err != nil {
 				return err
 			}
+
 			info.EnabledUSBCapabilities = &v
 		case tagFormFactor:
 			if len(value) != 1 {
 				return fieldLengthError(tag, 1, len(value))
 			}
+
 			info.FormFactor = FormFactor(value[0] & 0x0f)
 			info.IsFIPS = value[0]&0x80 != 0
 			info.IsSecurityKey = value[0]&0x40 != 0
@@ -223,38 +233,45 @@ func parseDeviceInfoFields(info *DeviceInfo, fields []byte) error {
 			if len(value) != 3 {
 				return fieldLengthError(tag, 3, len(value))
 			}
+
 			info.FirmwareVersion = FirmwareVersion{Major: value[0], Minor: value[1], Build: value[2]}
 		case tagAutoEjectTimeout:
 			if len(value) != 2 {
 				return fieldLengthError(tag, 2, len(value))
 			}
+
 			info.AutoEjectTimeout = binary.BigEndian.Uint16(value)
 		case tagChallengeTimeout:
 			if len(value) != 1 {
 				return fieldLengthError(tag, 1, len(value))
 			}
+
 			info.ChallengeResponseTimeout = value[0]
 		case tagDeviceFlags:
 			if len(value) != 1 {
 				return fieldLengthError(tag, 1, len(value))
 			}
+
 			info.DeviceFlags = value[0]
 		case tagLocked:
 			if len(value) != 1 || value[0] > 1 {
 				return fmt.Errorf("%w: invalid locked field", ErrInvalidDeviceInfo)
 			}
+
 			info.Locked = value[0] == 1
 		case tagNFCSupported:
 			v, err := capability(tag, value)
 			if err != nil {
 				return err
 			}
+
 			info.SupportedNFCCapabilities = &v
 		case tagNFCEnabled:
 			v, err := capability(tag, value)
 			if err != nil {
 				return err
 			}
+
 			info.EnabledNFCCapabilities = &v
 		case tagMoreData:
 			// Pagination metadata is consumed by the transport.
@@ -265,6 +282,7 @@ func parseDeviceInfoFields(info *DeviceInfo, fields []byte) error {
 			if !utf8.Valid(value) {
 				return fmt.Errorf("%w: part number is not UTF-8", ErrInvalidDeviceInfo)
 			}
+
 			v := string(value)
 			info.PartNumber = &v
 		case tagFIPSCapable:
@@ -272,46 +290,54 @@ func parseDeviceInfoFields(info *DeviceInfo, fields []byte) error {
 			if err != nil {
 				return err
 			}
+
 			info.FIPSCapable = &v
 		case tagFIPSApproved:
 			v, err := fipsCapabilities(tag, value)
 			if err != nil {
 				return err
 			}
+
 			info.FIPSApproved = &v
 		case tagPinComplexity:
 			v, err := booleanField(tag, value)
 			if err != nil {
 				return err
 			}
+
 			info.PinComplexity = &v
 		case tagNFCRestricted:
 			v, err := booleanField(tag, value)
 			if err != nil {
 				return err
 			}
+
 			info.NFCRestricted = &v
 		case tagResetBlocked:
 			v, err := capability(tag, value)
 			if err != nil {
 				return err
 			}
+
 			info.ResetBlocked = &v
 		case tagVersionQualifier:
 			v, err := parseVersionQualifier(tag, value)
 			if err != nil {
 				return err
 			}
+
 			info.VersionQualifier = &v
 		case tagFPSVersion:
 			if len(value) != 3 {
 				return fieldLengthError(tag, 3, len(value))
 			}
+
 			info.FPSVersion = &FirmwareVersion{Major: value[0], Minor: value[1], Build: value[2]}
 		case tagSTMVersion:
 			if len(value) != 3 {
 				return fieldLengthError(tag, 3, len(value))
 			}
+
 			info.STMVersion = &FirmwareVersion{Major: value[0], Minor: value[1], Build: value[2]}
 		}
 	}
@@ -323,6 +349,7 @@ func capability(tag byte, value []byte) (Capability, error) {
 	if len(value) != 2 {
 		return 0, fieldLengthError(tag, 2, len(value))
 	}
+
 	return Capability(binary.BigEndian.Uint16(value)), nil
 }
 
@@ -330,6 +357,7 @@ func fipsCapabilities(tag byte, value []byte) (FIPSCapability, error) {
 	if len(value) != 2 {
 		return 0, fieldLengthError(tag, 2, len(value))
 	}
+
 	return FIPSCapability(binary.BigEndian.Uint16(value)), nil
 }
 
@@ -337,6 +365,7 @@ func booleanField(tag byte, value []byte) (bool, error) {
 	if len(value) != 1 {
 		return false, fieldLengthError(tag, 1, len(value))
 	}
+
 	if value[0] > 1 {
 		return false, fmt.Errorf("%w: tag 0x%02x has invalid boolean value %d", ErrInvalidDeviceInfo, tag, value[0])
 	}
@@ -351,6 +380,7 @@ func parseVersionQualifier(tag byte, value []byte) (VersionQualifier, error) {
 		if len(fields) < 2 || int(fields[1]) > len(fields)-2 {
 			return VersionQualifier{}, fmt.Errorf("%w: tag 0x%02x contains truncated TLV", ErrInvalidDeviceInfo, tag)
 		}
+
 		fieldTag, length := fields[0], int(fields[1])
 		fieldValue := fields[2 : 2+length]
 		fields = fields[2+length:]
@@ -361,16 +391,19 @@ func parseVersionQualifier(tag byte, value []byte) (VersionQualifier, error) {
 			if len(fieldValue) != 3 {
 				return VersionQualifier{}, fieldLengthError(fieldTag, 3, len(fieldValue))
 			}
+
 			qualifier.Version = FirmwareVersion{Major: fieldValue[0], Minor: fieldValue[1], Build: fieldValue[2]}
 		case 0x02:
 			if len(fieldValue) != 1 {
 				return VersionQualifier{}, fieldLengthError(fieldTag, 1, len(fieldValue))
 			}
+
 			qualifier.ReleaseType = ReleaseType(fieldValue[0])
 		case 0x03:
 			if len(fieldValue) != 4 {
 				return VersionQualifier{}, fieldLengthError(fieldTag, 4, len(fieldValue))
 			}
+
 			qualifier.Iteration = binary.BigEndian.Uint32(fieldValue)
 		}
 	}

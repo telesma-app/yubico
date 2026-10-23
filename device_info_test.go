@@ -30,6 +30,7 @@ func TestParseDeviceInfoRejectsMalformedData(t *testing.T) {
 			t.Errorf("ParseDeviceInfo(%x) error = %v, want ErrInvalidDeviceInfo", data, err)
 		}
 	}
+
 	for _, tag := range []byte{
 		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x0a,
 		0x0d, 0x0e, 0x10, 0x14, 0x15, 0x16, 0x17, 0x18, 0x20, 0x21,
@@ -108,15 +109,18 @@ func TestParseDeviceInfoPreservesPresence(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		var fields map[string]json.RawMessage
 		if err := json.Unmarshal(encoded, &fields); err != nil {
 			t.Fatal(err)
 		}
+
 		for _, name := range []string{"serialNumber", "partNumber", "pinComplexity", "versionQualifier"} {
 			if _, present := fields[name]; present != test.present {
 				t.Errorf("JSON field %s presence = %t, want %t", name, present, test.present)
 			}
 		}
+
 		for _, name := range []string{"supportedUSBCapabilities", "formFactor", "firmwareVersion", "autoEjectTimeout", "challengeResponseTimeout", "deviceFlags", "locked", "isFIPS", "isSecurityKey"} {
 			if _, present := fields[name]; !present {
 				t.Errorf("required JSON field %s missing", name)
@@ -135,18 +139,22 @@ func TestParseDeviceInfoCurrentYubicoFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	info, err := ParseDeviceInfo(infoPage(fields...))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	requireValue(t, info.SerialNumber, uint32(36852201))
 	requireEqual(t, info.SupportedUSBCapabilities, Capability(0x1206))
 	requireValue(t, info.EnabledUSBCapabilities, Capability(0x1206))
 	requireEqual(t, info.FormFactor, FormFactorUSBCBiometricKeychain)
 	requireEqual(t, info.FirmwareVersion, FirmwareVersion{Build: 1})
+
 	if info.VersionQualifier == nil {
 		t.Fatal("missing qualifier")
 	}
+
 	requireEqual(t, info.VersionQualifier.Version, FirmwareVersion{Major: 5, Minor: 8})
 	requireEqual(t, info.VersionQualifier.ReleaseType, ReleaseTypeBeta)
 	requireEqual(t, info.VersionQualifier.Iteration, uint32(3))
@@ -154,6 +162,7 @@ func TestParseDeviceInfoCurrentYubicoFields(t *testing.T) {
 	requireValue(t, info.PartNumber, "78CLUFX5000P")
 	requireValue(t, info.FPSVersion, FirmwareVersion{Major: 1})
 	requireValue(t, info.STMVersion, FirmwareVersion{Major: 3, Build: 1})
+
 	if got := info.RawFields[0x11]; !bytes.Equal(got, []byte{0, 0, 0, 0}) {
 		t.Errorf("unknown field = %x", got)
 	}
@@ -178,15 +187,19 @@ func TestParseDeviceInfoPreservesUnknownValues(t *testing.T) {
 	requireValue(t, info.FIPSCapable, FIPSCapability(0x8000)|FIPSCapabilityCTAP2|FIPSCapabilityPIV|FIPSCapabilityOpenPGP|FIPSCapabilityOATH|FIPSCapabilityHSMAuth)
 	requireValue(t, info.FIPSApproved, FIPSCapability(0x4000)|FIPSCapabilityCTAP2|FIPSCapabilityPIV)
 	requireEqual(t, info.VersionQualifier.ReleaseType, ReleaseType(0xff))
+
 	if got := info.VersionQualifier.RawFields[0x80]; !bytes.Equal(got, []byte{0xaa, 0xbb}) {
 		t.Errorf("unknown qualifier TLV = %x", got)
 	}
+
 	if got := info.RawFields[0x04]; !bytes.Equal(got, []byte{0xff}) {
 		t.Errorf("raw form factor = %x", got)
 	}
+
 	if got := info.RawFields[0xfe]; !bytes.Equal(got, []byte{0xff, 0x01}) {
 		t.Errorf("unknown TLV = %x", got)
 	}
+
 	if got, ok := info.RawFields[0xff]; !ok || len(got) != 0 {
 		t.Errorf("empty unknown TLV = %x, present %t", got, ok)
 	}
@@ -230,21 +243,26 @@ func TestParseDeviceInfoPages(t *testing.T) {
 		0x03, 2, 0, 0, 0x06, 2, 0, 0, 0x07, 1, 0, 0x08, 1, 0, 0x0a, 1, 0,
 		0x01, 2, 0, 0, 0x16, 1, 1, 0xfe, 1, 2,
 	)
+
 	info, err := ParseDeviceInfoPages(first, last)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	requireEqual(t, info.SupportedUSBCapabilities, Capability(0))
 	requireEqual(t, info.FormFactor, FormFactorUSBCKeychain)
 	requireEqual(t, info.IsFIPS, false)
 	requireEqual(t, info.IsSecurityKey, false)
 	requireEqual(t, info.FirmwareVersion, FirmwareVersion{Major: 5, Minor: 7, Build: 4})
 	requireValue(t, info.PinComplexity, true)
+
 	if got := info.RawFields[0xfe]; !bytes.Equal(got, []byte{2}) {
 		t.Errorf("raw repeated TLV = %x", got)
 	}
+
 	clear(first)
 	clear(last)
+
 	if got := info.RawFields[0xfe]; !bytes.Equal(got, []byte{2}) {
 		t.Errorf("raw TLV changed with input: %x", got)
 	}
@@ -256,17 +274,21 @@ func TestParseDeviceInfoQualifierPresenceAndOwnership(t *testing.T) {
 		2, 1, 0,
 		3, 4, 0, 0, 0, 0,
 	)
+
 	info, err := ParseDeviceInfo(data)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	requireEqual(t, info.VersionQualifier.Version, FirmwareVersion{})
 	requireEqual(t, info.VersionQualifier.ReleaseType, ReleaseTypeAlpha)
 	requireEqual(t, info.VersionQualifier.Iteration, uint32(0))
 	requireEqual(t, info.FirmwareVersion, FirmwareVersion{Major: 5, Minor: 7, Build: 4})
+
 	for i := range data {
 		data[i] = 0xff
 	}
+
 	if got := info.VersionQualifier.RawFields[1]; !bytes.Equal(got, []byte{0, 0, 0}) {
 		t.Errorf("qualifier raw data changed with input: %x", got)
 	}
@@ -298,18 +320,22 @@ func infoPage(fields ...byte) []byte {
 
 func parseInfo(t *testing.T, fields ...byte) DeviceInfo {
 	t.Helper()
+
 	info, err := ParseDeviceInfo(completeInfoPage(fields...))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return info
 }
 
 func requireValue[T comparable](t *testing.T, got *T, want T) {
 	t.Helper()
+
 	if got == nil {
 		t.Fatalf("absent value, want %#v", want)
 	}
+
 	if *got != want {
 		t.Errorf("got %#v, want %#v", *got, want)
 	}
@@ -335,18 +361,22 @@ func completeInfoPage(fields ...byte) []byte {
 
 func withoutTag(fields []byte, tag byte) []byte {
 	var result []byte
+
 	for len(fields) > 0 {
 		length := 2 + int(fields[1])
 		if fields[0] != tag {
 			result = append(result, fields[:length]...)
 		}
+
 		fields = fields[length:]
 	}
+
 	return result
 }
 
 func requireEqual[T comparable](t *testing.T, got, want T) {
 	t.Helper()
+
 	if got != want {
 		t.Errorf("got %#v, want %#v", got, want)
 	}
@@ -356,12 +386,14 @@ func TestParseDeviceInfoRequiresBaseFields(t *testing.T) {
 	for _, tag := range []byte{0x01, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x0a} {
 		t.Run(fmt.Sprintf("tag_%02x", tag), func(t *testing.T) {
 			page := infoPage(withoutTag(baseFields(), tag)...)
+
 			_, err := ParseDeviceInfo(page)
 			if !errors.Is(err, ErrInvalidDeviceInfo) || !strings.Contains(err.Error(), fmt.Sprintf("0x%02x", tag)) {
 				t.Fatalf("missing tag 0x%02x: error = %v", tag, err)
 			}
 		})
 	}
+
 	if _, err := ParseDeviceInfo([]byte{0}); !errors.Is(err, ErrInvalidDeviceInfo) {
 		t.Fatalf("empty response error = %v", err)
 	}
@@ -374,13 +406,16 @@ func TestParseDeviceInfoYubiKey4MayOmitEnabledUSB(t *testing.T) {
 		{Major: 4, Minor: 4, Build: 5},
 	} {
 		page := infoPage(append(fields, 0x05, 3, version.Major, version.Minor, version.Build)...)
+
 		info, err := ParseDeviceInfo(page)
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if info.EnabledUSBCapabilities != nil {
 			t.Fatal("omitted enabled USB capabilities acquired a value")
 		}
+
 		requireEqual(t, info.SupportedUSBCapabilities, Capability(0x023f))
 		requireEqual(t, info.IsFIPS, false)
 	}
@@ -409,6 +444,7 @@ func TestParseDeviceInfoRequiresPairedNFCFields(t *testing.T) {
 			t.Fatalf("unpaired NFC tag 0x%02x: %v", tag, err)
 		}
 	}
+
 	info, err := ParseDeviceInfoPages(
 		completeInfoPage(0x0d, 2, 0, 0),
 		infoPage(0x0e, 2, 0, 0),
@@ -416,6 +452,7 @@ func TestParseDeviceInfoRequiresPairedNFCFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	requireValue(t, info.SupportedNFCCapabilities, Capability(0))
 	requireValue(t, info.EnabledNFCCapabilities, Capability(0))
 }
@@ -424,11 +461,13 @@ func TestParseDeviceInfoRequiresCompleteQualifier(t *testing.T) {
 	qualifier := []byte{1, 3, 5, 8, 0, 2, 1, 0, 3, 4, 0, 0, 0, 0}
 	for _, tag := range []byte{1, 2, 3} {
 		fields := withoutTag(qualifier, tag)
+
 		_, err := ParseDeviceInfo(completeInfoPage(append([]byte{0x19, byte(len(fields))}, fields...)...))
 		if !errors.Is(err, ErrInvalidDeviceInfo) || !strings.Contains(err.Error(), "version qualifier") {
 			t.Fatalf("qualifier without tag %d: %v", tag, err)
 		}
 	}
+
 	if _, err := ParseDeviceInfo(completeInfoPage(0x19, 0)); !errors.Is(err, ErrInvalidDeviceInfo) {
 		t.Fatalf("empty qualifier: %v", err)
 	}
@@ -440,6 +479,7 @@ func TestParseDeviceInfoRequiresCompleteQualifier(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	requireEqual(t, info.VersionQualifier.Version, FirmwareVersion{Major: 5, Minor: 8})
 	requireEqual(t, info.VersionQualifier.ReleaseType, ReleaseTypeAlpha)
 	requireEqual(t, info.VersionQualifier.Iteration, uint32(0))

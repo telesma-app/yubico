@@ -43,14 +43,17 @@ func (d *scriptedDevice) Write(ctx context.Context, p []byte) (int, error) {
 	if p[5] == byte(lowlevel.CTAPHID_INIT)|initPacketBit {
 		data := append([]byte(nil), p[8:16]...)
 		data = append(data, d.cid[:]...)
+
 		data = append(data, 2, 1, 0, 0, 0x04)
 		d.initReply <- responseBytes(d.t, lowlevel.BROADCAST_CID, lowlevel.CTAPHID_INIT, data)
+
 		return len(p), nil
 	}
 
 	d.writeContexts = append(d.writeContexts, ctx)
 	n, err := d.writes.Write(p)
 	d.start.Do(func() { close(d.ready) })
+
 	return n, err
 }
 
@@ -72,6 +75,7 @@ func TestDeviceInfo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	if got, want := info.SupportedUSBCapabilities, yubico.Capability(0x023f); got != want {
 		t.Errorf("got %#v, want %#v", got, want)
 	}
@@ -80,12 +84,15 @@ func TestDeviceInfo(t *testing.T) {
 	if got, want := len(written), reportSize; got != want {
 		t.Fatalf("got length %d, want %d", got, want)
 	}
+
 	if got, want := written[5], byte(CommandGetDeviceInfo)|initPacketBit; got != want {
 		t.Errorf("got %#v, want %#v", got, want)
 	}
+
 	if got, want := written[1:5], cid[:]; (got == nil) != (want == nil) || !bytes.Equal(got, want) {
 		t.Errorf("got %#v, want %#v", got, want)
 	}
+
 	if got, want := len(rawDevice.writeContexts), 1; got != want {
 		t.Fatalf("got length %d, want %d", got, want)
 	}
@@ -108,6 +115,7 @@ func TestClose(t *testing.T) {
 	if err := device.Close(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	if got := rawDevice.closed; !got {
 		t.Errorf("got false, want true")
 	}
@@ -142,13 +150,16 @@ func responseBytes(
 	}
 
 	var reports bytes.Buffer
+
 	_, err = message.WriteTo(&reports)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	encoded := reports.Bytes()
+
 	var response []byte
+
 	for len(encoded) > 0 {
 		{
 			got, limit := len(encoded), reportSize
@@ -156,6 +167,7 @@ func responseBytes(
 				t.Fatalf("got %v, want greater than or equal to %v", got, limit)
 			}
 		}
+
 		response = append(response, encoded[1:reportSize]...)
 		encoded = encoded[reportSize:]
 	}
@@ -169,14 +181,17 @@ func TestDeviceInfoPreservesWireProtocolError(t *testing.T) {
 	cid := lowlevel.ChannelID{1, 2, 3, 4}
 	raw := newScriptedDevice(responseBytes(t, cid, lowlevel.CTAPHID_ERROR, []byte{byte(lowlevel.ERR_INVALID_CMD)}))
 	device := &Device{transport: openTestTransport(t, raw, cid)}
+
 	_, err := device.DeviceInfo(t.Context())
 	if !errors.Is(err, yubico.ErrDeviceInfoNotSupported) {
 		t.Fatalf("error = %v, want unsupported command", err)
 	}
+
 	var protocolErr *lowlevel.ErrorResponse
 	if !errors.As(err, &protocolErr) || protocolErr.ErrorCode != lowlevel.ERR_INVALID_CMD {
 		t.Fatalf("underlying protocol error lost: %v", err)
 	}
+
 	if raw.closed {
 		t.Fatal("read closed the caller-owned channel")
 	}
@@ -188,10 +203,13 @@ func openTestTransport(t testing.TB, raw *scriptedDevice, cid lowlevel.ChannelID
 	raw.cid = cid
 	raw.initReply = make(chan []byte, 1)
 	raw.ready = make(chan struct{})
+
 	transport, err := lowlevel.Open(t.Context(), raw)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = transport.Close() })
+
 	return transport
 }

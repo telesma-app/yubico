@@ -3,35 +3,11 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/telesma-app/yubico.svg)](https://pkg.go.dev/github.com/telesma-app/yubico)
 [![Go](https://github.com/telesma-app/yubico/actions/workflows/go.yml/badge.svg)](https://github.com/telesma-app/yubico/actions/workflows/go.yml)
 
-Pure-Go support for Yubico-specific device information and identity.
+Pure-Go support for reported Yubico management information.
 
 > [!WARNING]
 > This module is under active development. Its public API may change during
 > `v0.x`.
-
-## Packages
-
-- `yubico` contains transport-independent device-information models, response
-  parsing and canonical model naming.
-- `yubico/transport/ctaphid` reads device information through Yubico's CTAPHID
-  vendor command `0x42`, using
-  [`github.com/telesma-app/ctap`](https://github.com/telesma-app/ctap).
-- `yubico/transport/pcsc` reads device information through the Yubico
-  management application on an exact PC/SC reader.
-- `yubico/resolver` identifies a smart-card target and distinguishes a missing
-  Yubico management application from transport or protocol failures.
-
-The CTAPHID transport can open a FIDO HID collection by path and owns the
-resulting connection until `Close`. `GetDeviceInfo` also accepts an existing
-vendor-command channel without taking ownership of it. Both forms send logical
-command `0x42`; CTAPHID framing adds the init-packet bit, so the on-wire command
-byte is `0xc2`.
-
-The PC/SC management AID, commands and status handling follow Yubico's
-[Configuration Reference](https://developers.yubico.com/yubikey-manager/Config_Reference.html)
-and the official
-[`yubikey-manager`](https://github.com/Yubico/yubikey-manager)
-implementation.
 
 ## Installation
 
@@ -40,6 +16,35 @@ go get github.com/telesma-app/yubico@latest
 ```
 
 See [`go.mod`](go.mod) for the required Go version.
+
+## Packages
+
+- `yubico` parses management responses and derives model names.
+- `yubico/transport/ctaphid` reads device information through CTAPHID vendor command `0x42`.
+- `yubico/transport/pcsc` reads device information through the management applet.
+
+## Usage
+
+`DeviceInfo` preserves reported values and raw TLVs; nil optional fields mean the
+value was not reported. `SerialNumber` is the reported numeric serial.
+`ModelName()` derives a model separately and returns false when it cannot
+recognize the firmware or form factor.
+
+Transport `Open` functions return caller-owned devices. Call `DeviceInfo(ctx)`
+to read management information and `Close()` to release the connection.
+
+`ctaphid.ReadDeviceInfo` and `pcsc.ReadDeviceInfo` borrow existing connections; for
+PC/SC, the caller manages the transaction and subsequent applet selection.
+
+`pcsc.Open(reader, opts...)` forwards native PC/SC options. By default, `Close`
+leaves the card powered (`DispositionLeaveCard`). Pass
+`nativepcsc.WithDisconnectDisposition(nativepcsc.DispositionResetCard)` when
+a reset on close is required.
+
+The protocol follows Yubico's
+[Configuration Reference](https://developers.yubico.com/yubikey-manager/Config_Reference.html).
+See the [Go reference](https://pkg.go.dev/github.com/telesma-app/yubico) for field
+and error contracts.
 
 ## Testing
 

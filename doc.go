@@ -1,5 +1,3 @@
-// Package yubico provides transport-independent Yubico device information,
-// response parsing and identity naming.
-//
-// CTAPHID access lives under transport/ctaphid.
+// Package yubico parses management responses and derives model names.
+// Device access lives under transport/ctaphid and transport/pcsc.
 package yubico

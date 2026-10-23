@@ -25,6 +25,6 @@ func TestHardware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	t.Logf("model: %s", info.ModelName(""))
+	t.Logf("reported information: %+v", info)
 	t.Logf("firmware: %s", info.FirmwareVersion)
 }

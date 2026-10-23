@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"slices"
 	"unicode/utf8"
 )
 
@@ -47,6 +48,18 @@ const (
 	tagSTMVersion       byte = 0x21
 )
 
+// FIPSCapability is the bitmap used by the FIPS capable and approved TLVs.
+// Its bit positions differ from Capability. Unknown bits are preserved.
+type FIPSCapability uint16
+
+const (
+	FIPSCapabilityCTAP2   FIPSCapability = 1 << 0
+	FIPSCapabilityPIV     FIPSCapability = 1 << 1
+	FIPSCapabilityOpenPGP FIPSCapability = 1 << 2
+	FIPSCapabilityOATH    FIPSCapability = 1 << 3
+	FIPSCapabilityHSMAuth FIPSCapability = 1 << 4
+)
+
 // FirmwareVersion is the major.minor.build version reported by the device.
 type FirmwareVersion struct {
 	Major byte `json:"major"`
@@ -63,12 +76,12 @@ const (
 	ReleaseTypeFinal
 )
 
-// VersionQualifier contains the behavioral firmware version reported by
-// development firmware.
+// VersionQualifier contains the required version, release type and iteration TLVs.
 type VersionQualifier struct {
 	Version     FirmwareVersion `json:"version"`
 	ReleaseType ReleaseType     `json:"releaseType"`
 	Iteration   uint32          `json:"iteration"`
+	RawFields   map[byte][]byte `json:"rawFields"`
 }
 
 // FormFactor describes the physical shape and connector type of a YubiKey.
@@ -85,12 +98,13 @@ const (
 	FormFactorUSBCBiometricKeychain FormFactor = 7
 )
 
-// DeviceInfo is returned by Yubico's GET DEVICE INFORMATION command.
-// UnknownFields preserves tags introduced by newer firmware.
+// DeviceInfo contains reported management values; nil pointers mark absent TLVs.
+// RawFields owns a copy of every tag's last value. Parsing applies no firmware
+// corrections or model inference.
 type DeviceInfo struct {
 	SupportedUSBCapabilities Capability        `json:"supportedUSBCapabilities"`
-	Serial                   *uint32           `json:"serial,omitempty"`
-	EnabledUSBCapabilities   Capability        `json:"enabledUSBCapabilities"`
+	SerialNumber             *uint32           `json:"serialNumber,omitempty"`
+	EnabledUSBCapabilities   *Capability       `json:"enabledUSBCapabilities,omitempty"`
 	FormFactor               FormFactor        `json:"formFactor"`
 	IsFIPS                   bool              `json:"isFIPS"`
 	IsSecurityKey            bool              `json:"isSecurityKey"`
@@ -101,55 +115,75 @@ type DeviceInfo struct {
 	DeviceFlags              byte              `json:"deviceFlags"`
 	Locked                   bool              `json:"locked"`
 	PartNumber               *string           `json:"partNumber,omitempty"`
-	FIPSCapable              Capability        `json:"fipsCapable"`
-	FIPSApproved             Capability        `json:"fipsApproved"`
-	PinComplexity            bool              `json:"pinComplexity"`
-	NFCRestricted            bool              `json:"nfcRestricted"`
-	ResetBlocked             Capability        `json:"resetBlocked"`
+	FIPSCapable              *FIPSCapability   `json:"fipsCapable,omitempty"`
+	FIPSApproved             *FIPSCapability   `json:"fipsApproved,omitempty"`
+	PinComplexity            *bool             `json:"pinComplexity,omitempty"`
+	NFCRestricted            *bool             `json:"nfcRestricted,omitempty"`
+	ResetBlocked             *Capability       `json:"resetBlocked,omitempty"`
 	FPSVersion               *FirmwareVersion  `json:"fpsVersion,omitempty"`
 	STMVersion               *FirmwareVersion  `json:"stmVersion,omitempty"`
 	SupportedNFCCapabilities *Capability       `json:"supportedNFCCapabilities,omitempty"`
 	EnabledNFCCapabilities   *Capability       `json:"enabledNFCCapabilities,omitempty"`
-	UnknownFields            map[byte][]byte   `json:"unknownFields"`
+	RawFields                map[byte][]byte   `json:"rawFields"`
 }
 
-var ErrInvalidDeviceInfo = errors.New("yubico: invalid device information")
+var (
+	// ErrInvalidDeviceInfo reports malformed device-information response data.
+	ErrInvalidDeviceInfo = errors.New("yubico: invalid device information")
+	// ErrDeviceInfoNotSupported reports an explicit protocol rejection of the
+	// GET DEVICE INFORMATION command. The underlying protocol error is retained.
+	ErrDeviceInfoNotSupported = errors.New("yubico: device information command not supported")
+)
 
 // ParseDeviceInfo parses TOTAL-LENGTH followed by TAG-LENGTH-VALUE fields.
 func ParseDeviceInfo(data []byte) (DeviceInfo, error) {
 	return ParseDeviceInfoPages(data)
 }
 
-// ParseDeviceInfoPages parses and merges one or more paginated device-info
-// responses. Fields from later pages replace fields with the same tag from
-// earlier pages.
+// ParseDeviceInfoPages merges pages, then checks required fields.
+// Later values replace earlier values of the same tag.
 func ParseDeviceInfoPages(pages ...[]byte) (DeviceInfo, error) {
 	if len(pages) == 0 {
 		return DeviceInfo{}, fmt.Errorf("%w: missing response page", ErrInvalidDeviceInfo)
 	}
 
-	info := DeviceInfo{UnknownFields: make(map[byte][]byte)}
-	seen := make(map[byte]bool)
+	info := DeviceInfo{RawFields: make(map[byte][]byte)}
 	for _, data := range pages {
 		if len(data) == 0 || int(data[0]) != len(data)-1 {
 			return DeviceInfo{}, fmt.Errorf("%w: total length does not match payload", ErrInvalidDeviceInfo)
 		}
-		if err := parseDeviceInfoFields(&info, seen, data[1:]); err != nil {
+		if err := parseDeviceInfoFields(&info, data[1:]); err != nil {
 			return DeviceInfo{}, err
 		}
 	}
-	if !seen[tagUSBSupported] {
-		return DeviceInfo{}, fmt.Errorf("%w: missing supported USB capabilities", ErrInvalidDeviceInfo)
+
+	// YubiKey 4 may omit enabled USB capabilities.
+	for _, tag := range [...]byte{
+		tagUSBSupported, tagFormFactor, tagFirmwareVersion,
+		tagAutoEjectTimeout, tagChallengeTimeout, tagDeviceFlags, tagLocked,
+	} {
+		if _, ok := info.RawFields[tag]; !ok {
+			return DeviceInfo{}, fmt.Errorf("%w: missing required tag 0x%02x", ErrInvalidDeviceInfo, tag)
+		}
 	}
-	if seen[tagNFCSupported] != seen[tagNFCEnabled] {
+	if info.EnabledUSBCapabilities == nil && info.FirmwareVersion.Major != 4 {
+		return DeviceInfo{}, fmt.Errorf("%w: missing required tag 0x%02x", ErrInvalidDeviceInfo, tagUSBEnabled)
+	}
+	if (info.SupportedNFCCapabilities == nil) != (info.EnabledNFCCapabilities == nil) {
 		return DeviceInfo{}, fmt.Errorf("%w: NFC capability fields must be present together", ErrInvalidDeviceInfo)
 	}
-	normalizeDeviceInfo(&info)
+	if info.VersionQualifier != nil {
+		for _, tag := range [...]byte{0x01, 0x02, 0x03} {
+			if _, ok := info.VersionQualifier.RawFields[tag]; !ok {
+				return DeviceInfo{}, fmt.Errorf("%w: version qualifier missing required tag 0x%02x", ErrInvalidDeviceInfo, tag)
+			}
+		}
+	}
 
 	return info, nil
 }
 
-func parseDeviceInfoFields(info *DeviceInfo, seen map[byte]bool, fields []byte) error {
+func parseDeviceInfoFields(info *DeviceInfo, fields []byte) error {
 	for len(fields) > 0 {
 		if len(fields) < 2 || int(fields[1]) > len(fields)-2 {
 			return fmt.Errorf("%w: truncated TLV", ErrInvalidDeviceInfo)
@@ -157,7 +191,7 @@ func parseDeviceInfoFields(info *DeviceInfo, seen map[byte]bool, fields []byte) 
 		tag, length := fields[0], int(fields[1])
 		value := fields[2 : 2+length]
 		fields = fields[2+length:]
-		seen[tag] = true
+		info.RawFields[tag] = slices.Clone(value)
 
 		switch tag {
 		case tagUSBSupported:
@@ -171,52 +205,45 @@ func parseDeviceInfoFields(info *DeviceInfo, seen map[byte]bool, fields []byte) 
 				return fieldLengthError(tag, 4, len(value))
 			}
 			v := binary.BigEndian.Uint32(value)
-			info.Serial = &v
+			info.SerialNumber = &v
 		case tagUSBEnabled:
 			v, err := capability(tag, value)
 			if err != nil {
 				return err
 			}
-			info.EnabledUSBCapabilities = v
+			info.EnabledUSBCapabilities = &v
 		case tagFormFactor:
 			if len(value) != 1 {
 				return fieldLengthError(tag, 1, len(value))
 			}
 			info.FormFactor = FormFactor(value[0] & 0x0f)
-			if info.FormFactor > FormFactorUSBCBiometricKeychain {
-				info.FormFactor = FormFactorUnknown
-			}
 			info.IsFIPS = value[0]&0x80 != 0
 			info.IsSecurityKey = value[0]&0x40 != 0
 		case tagFirmwareVersion:
 			if len(value) != 3 {
 				return fieldLengthError(tag, 3, len(value))
 			}
-			info.FirmwareVersion = FirmwareVersion{value[0], value[1], value[2]}
+			info.FirmwareVersion = FirmwareVersion{Major: value[0], Minor: value[1], Build: value[2]}
 		case tagAutoEjectTimeout:
 			if len(value) != 2 {
 				return fieldLengthError(tag, 2, len(value))
 			}
-			v := binary.BigEndian.Uint16(value)
-			info.AutoEjectTimeout = v
+			info.AutoEjectTimeout = binary.BigEndian.Uint16(value)
 		case tagChallengeTimeout:
 			if len(value) != 1 {
 				return fieldLengthError(tag, 1, len(value))
 			}
-			v := value[0]
-			info.ChallengeResponseTimeout = v
+			info.ChallengeResponseTimeout = value[0]
 		case tagDeviceFlags:
 			if len(value) != 1 {
 				return fieldLengthError(tag, 1, len(value))
 			}
-			v := value[0]
-			info.DeviceFlags = v
+			info.DeviceFlags = value[0]
 		case tagLocked:
 			if len(value) != 1 || value[0] > 1 {
 				return fmt.Errorf("%w: invalid locked field", ErrInvalidDeviceInfo)
 			}
-			v := value[0] == 1
-			info.Locked = v
+			info.Locked = value[0] == 1
 		case tagNFCSupported:
 			v, err := capability(tag, value)
 			if err != nil {
@@ -235,41 +262,41 @@ func parseDeviceInfoFields(info *DeviceInfo, seen map[byte]bool, fields []byte) 
 				return fieldLengthError(tag, 1, len(value))
 			}
 		case tagPartNumber:
-			info.PartNumber = nil
-			if len(value) > 0 && utf8.Valid(value) {
-				v := string(value)
-				info.PartNumber = &v
+			if !utf8.Valid(value) {
+				return fmt.Errorf("%w: part number is not UTF-8", ErrInvalidDeviceInfo)
 			}
+			v := string(value)
+			info.PartNumber = &v
 		case tagFIPSCapable:
 			v, err := fipsCapabilities(tag, value)
 			if err != nil {
 				return err
 			}
-			info.FIPSCapable = v
+			info.FIPSCapable = &v
 		case tagFIPSApproved:
 			v, err := fipsCapabilities(tag, value)
 			if err != nil {
 				return err
 			}
-			info.FIPSApproved = v
+			info.FIPSApproved = &v
 		case tagPinComplexity:
 			v, err := booleanField(tag, value)
 			if err != nil {
 				return err
 			}
-			info.PinComplexity = v
+			info.PinComplexity = &v
 		case tagNFCRestricted:
 			v, err := booleanField(tag, value)
 			if err != nil {
 				return err
 			}
-			info.NFCRestricted = v
+			info.NFCRestricted = &v
 		case tagResetBlocked:
 			v, err := capability(tag, value)
 			if err != nil {
 				return err
 			}
-			info.ResetBlocked = v
+			info.ResetBlocked = &v
 		case tagVersionQualifier:
 			v, err := parseVersionQualifier(tag, value)
 			if err != nil {
@@ -280,54 +307,16 @@ func parseDeviceInfoFields(info *DeviceInfo, seen map[byte]bool, fields []byte) 
 			if len(value) != 3 {
 				return fieldLengthError(tag, 3, len(value))
 			}
-			info.FPSVersion = nil
-			v := FirmwareVersion{value[0], value[1], value[2]}
-			if v != (FirmwareVersion{}) {
-				info.FPSVersion = &v
-			}
+			info.FPSVersion = &FirmwareVersion{Major: value[0], Minor: value[1], Build: value[2]}
 		case tagSTMVersion:
 			if len(value) != 3 {
 				return fieldLengthError(tag, 3, len(value))
 			}
-			info.STMVersion = nil
-			v := FirmwareVersion{value[0], value[1], value[2]}
-			if v != (FirmwareVersion{}) {
-				info.STMVersion = &v
-			}
-		default:
-			info.UnknownFields[tag] = append([]byte(nil), value...)
+			info.STMVersion = &FirmwareVersion{Major: value[0], Minor: value[1], Build: value[2]}
 		}
 	}
 
 	return nil
-}
-
-func normalizeDeviceInfo(info *DeviceInfo) {
-	version := info.EffectiveFirmwareVersion()
-
-	// YubiKey 4.2.4 reports its supported applications incorrectly.
-	if version == (FirmwareVersion{Major: 4, Minor: 2, Build: 4}) {
-		info.SupportedUSBCapabilities = Capability(0x003f)
-	}
-	// Enabled USB capabilities are not reliable on YubiKey 4 firmware.
-	if version.Major == 4 {
-		info.EnabledUSBCapabilities = 0
-	}
-	// YubiKey 4 FIPS devices identify themselves through their firmware range.
-	if version.Major == 4 && version.Minor == 4 {
-		info.IsFIPS = true
-	}
-}
-
-// EffectiveFirmwareVersion returns the version used for behavioral checks.
-// Alpha and beta firmware report this version through VersionQualifier.
-func (info DeviceInfo) EffectiveFirmwareVersion() FirmwareVersion {
-	if info.VersionQualifier != nil &&
-		info.VersionQualifier.ReleaseType != ReleaseTypeFinal {
-		return info.VersionQualifier.Version
-	}
-
-	return info.FirmwareVersion
 }
 
 func capability(tag byte, value []byte) (Capability, error) {
@@ -337,30 +326,11 @@ func capability(tag byte, value []byte) (Capability, error) {
 	return Capability(binary.BigEndian.Uint16(value)), nil
 }
 
-func fipsCapabilities(tag byte, value []byte) (Capability, error) {
+func fipsCapabilities(tag byte, value []byte) (FIPSCapability, error) {
 	if len(value) != 2 {
 		return 0, fieldLengthError(tag, 2, len(value))
 	}
-
-	raw := binary.BigEndian.Uint16(value)
-	var capabilities Capability
-	if raw&(1<<0) != 0 {
-		capabilities |= CapabilityCTAP2
-	}
-	if raw&(1<<1) != 0 {
-		capabilities |= CapabilityPIV
-	}
-	if raw&(1<<2) != 0 {
-		capabilities |= CapabilityOpenPGP
-	}
-	if raw&(1<<3) != 0 {
-		capabilities |= CapabilityOATH
-	}
-	if raw&(1<<4) != 0 {
-		capabilities |= CapabilityHSMAuth
-	}
-
-	return capabilities, nil
+	return FIPSCapability(binary.BigEndian.Uint16(value)), nil
 }
 
 func booleanField(tag byte, value []byte) (bool, error) {
@@ -375,8 +345,7 @@ func booleanField(tag byte, value []byte) (bool, error) {
 }
 
 func parseVersionQualifier(tag byte, value []byte) (VersionQualifier, error) {
-	var qualifier VersionQualifier
-	var hasVersion, hasReleaseType, hasIteration bool
+	qualifier := VersionQualifier{RawFields: make(map[byte][]byte)}
 
 	for fields := value; len(fields) > 0; {
 		if len(fields) < 2 || int(fields[1]) > len(fields)-2 {
@@ -385,39 +354,25 @@ func parseVersionQualifier(tag byte, value []byte) (VersionQualifier, error) {
 		fieldTag, length := fields[0], int(fields[1])
 		fieldValue := fields[2 : 2+length]
 		fields = fields[2+length:]
+		qualifier.RawFields[fieldTag] = slices.Clone(fieldValue)
 
 		switch fieldTag {
 		case 0x01:
 			if len(fieldValue) != 3 {
 				return VersionQualifier{}, fieldLengthError(fieldTag, 3, len(fieldValue))
 			}
-			qualifier.Version = FirmwareVersion{fieldValue[0], fieldValue[1], fieldValue[2]}
-			hasVersion = true
+			qualifier.Version = FirmwareVersion{Major: fieldValue[0], Minor: fieldValue[1], Build: fieldValue[2]}
 		case 0x02:
 			if len(fieldValue) != 1 {
 				return VersionQualifier{}, fieldLengthError(fieldTag, 1, len(fieldValue))
 			}
 			qualifier.ReleaseType = ReleaseType(fieldValue[0])
-			if qualifier.ReleaseType > ReleaseTypeFinal {
-				return VersionQualifier{}, fmt.Errorf(
-					"%w: tag 0x%02x has invalid release type %d",
-					ErrInvalidDeviceInfo,
-					tag,
-					fieldValue[0],
-				)
-			}
-			hasReleaseType = true
 		case 0x03:
 			if len(fieldValue) != 4 {
 				return VersionQualifier{}, fieldLengthError(fieldTag, 4, len(fieldValue))
 			}
 			qualifier.Iteration = binary.BigEndian.Uint32(fieldValue)
-			hasIteration = true
 		}
-	}
-
-	if !hasVersion || !hasReleaseType || !hasIteration {
-		return VersionQualifier{}, fmt.Errorf("%w: tag 0x%02x is incomplete", ErrInvalidDeviceInfo, tag)
 	}
 
 	return qualifier, nil

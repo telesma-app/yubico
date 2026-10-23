@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	lowlevel "github.com/telesma-app/ctap/transport/ctaphid"
@@ -16,19 +17,41 @@ const (
 )
 
 type scriptedDevice struct {
+	t             testing.TB
+	cid           lowlevel.ChannelID
+	initReply     chan []byte
+	ready         chan struct{}
+	start         sync.Once
 	reads         *bytes.Reader
 	writes        bytes.Buffer
 	writeContexts []context.Context
 	closed        bool
 }
 
-func (d *scriptedDevice) Read(_ context.Context, p []byte) (int, error) {
-	return d.reads.Read(p)
+func (d *scriptedDevice) Read(ctx context.Context, p []byte) (int, error) {
+	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	case reply := <-d.initReply:
+		return copy(p, reply), nil
+	case <-d.ready:
+		return d.reads.Read(p)
+	}
 }
 
 func (d *scriptedDevice) Write(ctx context.Context, p []byte) (int, error) {
+	if p[5] == byte(lowlevel.CTAPHID_INIT)|initPacketBit {
+		data := append([]byte(nil), p[8:16]...)
+		data = append(data, d.cid[:]...)
+		data = append(data, 2, 1, 0, 0, 0x04)
+		d.initReply <- responseBytes(d.t, lowlevel.BROADCAST_CID, lowlevel.CTAPHID_INIT, data)
+		return len(p), nil
+	}
+
 	d.writeContexts = append(d.writeContexts, ctx)
-	return d.writes.Write(p)
+	n, err := d.writes.Write(p)
+	d.start.Do(func() { close(d.ready) })
+	return n, err
 }
 
 func (d *scriptedDevice) Close() error {
@@ -41,9 +64,9 @@ func TestDeviceInfo(t *testing.T) {
 
 	ctx := context.WithValue(t.Context(), contextKey{}, "device-info")
 	cid := lowlevel.ChannelID{1, 2, 3, 4}
-	payload := []byte{4, 0x01, 2, 0x02, 0x3f}
+	payload := completeInfoPage()
 	rawDevice := newScriptedDevice(responseBytes(t, cid, CommandGetDeviceInfo, payload))
-	device := &Device{transport: lowlevel.NewTransport(rawDevice, cid)}
+	device := &Device{transport: openTestTransport(t, rawDevice, cid)}
 
 	info, err := device.DeviceInfo(ctx)
 	if err != nil {
@@ -79,7 +102,7 @@ func TestDeviceInfo(t *testing.T) {
 func TestClose(t *testing.T) {
 	rawDevice := newScriptedDevice()
 	device := &Device{
-		transport: lowlevel.NewTransport(rawDevice, lowlevel.ChannelID{}),
+		transport: openTestTransport(t, rawDevice, lowlevel.ChannelID{}),
 	}
 
 	if err := device.Close(); err != nil {
@@ -141,3 +164,34 @@ func responseBytes(
 }
 
 var _ lowlevel.Device = (*scriptedDevice)(nil)
+
+func TestDeviceInfoPreservesWireProtocolError(t *testing.T) {
+	cid := lowlevel.ChannelID{1, 2, 3, 4}
+	raw := newScriptedDevice(responseBytes(t, cid, lowlevel.CTAPHID_ERROR, []byte{byte(lowlevel.ERR_INVALID_CMD)}))
+	device := &Device{transport: openTestTransport(t, raw, cid)}
+	_, err := device.DeviceInfo(t.Context())
+	if !errors.Is(err, yubico.ErrDeviceInfoNotSupported) {
+		t.Fatalf("error = %v, want unsupported command", err)
+	}
+	var protocolErr *lowlevel.ErrorResponse
+	if !errors.As(err, &protocolErr) || protocolErr.ErrorCode != lowlevel.ERR_INVALID_CMD {
+		t.Fatalf("underlying protocol error lost: %v", err)
+	}
+	if raw.closed {
+		t.Fatal("read closed the caller-owned channel")
+	}
+}
+
+func openTestTransport(t testing.TB, raw *scriptedDevice, cid lowlevel.ChannelID) *lowlevel.Transport {
+	t.Helper()
+	raw.t = t
+	raw.cid = cid
+	raw.initReply = make(chan []byte, 1)
+	raw.ready = make(chan struct{})
+	transport, err := lowlevel.Open(t.Context(), raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = transport.Close() })
+	return transport
+}

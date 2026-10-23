@@ -35,12 +35,11 @@ type Device struct {
 	card card
 }
 
-// Open connects to the Yubico device in reader.
-func Open(reader string) (*Device, error) {
-	card, err := nativepcsc.Open(
-		reader,
-		nativepcsc.WithDisconnectDisposition(nativepcsc.DispositionResetCard),
-	)
+// Open connects to the Yubico device in reader and returns a caller-owned device.
+// Options are passed to the native PC/SC connection; Close leaves the card
+// powered by default. Use nativepcsc.WithDisconnectDisposition to request a reset.
+func Open(reader string, opts ...nativepcsc.OpenOption) (*Device, error) {
+	card, err := nativepcsc.Open(reader, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -48,11 +47,9 @@ func Open(reader string) (*Device, error) {
 	return &Device{card: card}, nil
 }
 
-// Close closes the PC/SC connection.
+// Close closes the PC/SC connection, canceling an active card operation when
+// supported by the native implementation.
 func (d *Device) Close() error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
 	return d.card.Close()
 }
 
@@ -73,15 +70,14 @@ func (d *Device) DeviceInfo(
 		)
 	}()
 
-	if err := d.selectManagement(ctx); err != nil {
-		return yubico.DeviceInfo{}, err
-	}
-
-	return d.readDeviceInfo(ctx)
+	return ReadDeviceInfo(ctx, d.card)
 }
 
-func (d *Device) selectManagement(ctx context.Context) error {
-	response, err := iso7816.Exchange(ctx, d.card, iso7816.Command{
+// ReadDeviceInfo selects management on a borrowed card and leaves it selected.
+// The caller serializes access, manages the transaction and subsequent applet
+// selection, and retains ownership of the card.
+func ReadDeviceInfo(ctx context.Context, card iso7816.Card) (yubico.DeviceInfo, error) {
+	response, err := iso7816.Exchange(ctx, card, iso7816.Command{
 		CLA:      0x00,
 		INS:      0xa4,
 		P1:       0x04,
@@ -89,30 +85,27 @@ func (d *Device) selectManagement(ctx context.Context) error {
 		Encoding: iso7816.EncodingShort,
 	})
 	if err != nil {
-		return err
+		return yubico.DeviceInfo{}, err
 	}
 	switch response.Status {
 	case 0x6999, 0x6a82, 0x6b00, 0x6d00:
-		return fmt.Errorf(
+		return yubico.DeviceInfo{}, fmt.Errorf(
 			"%w: %w",
 			ErrManagementApplicationNotAvailable,
 			response.APDUError(),
 		)
 	}
+	if err := response.APDUError(); err != nil {
+		return yubico.DeviceInfo{}, err
+	}
 
-	return response.APDUError()
-}
-
-func (d *Device) readDeviceInfo(ctx context.Context) (yubico.DeviceInfo, error) {
-	remainingPages := byte(1)
 	var pages [][]byte
 
-	for page := byte(0); remainingPages > 0; page++ {
-		remainingPages--
-		response, err := iso7816.Exchange(ctx, d.card, iso7816.Command{
+	for page := 0; ; page++ {
+		response, err := iso7816.Exchange(ctx, card, iso7816.Command{
 			CLA:      0x00,
 			INS:      0x1d,
-			P1:       page,
+			P1:       byte(page),
 			Le:       256,
 			Encoding: iso7816.EncodingShort,
 		})
@@ -120,38 +113,47 @@ func (d *Device) readDeviceInfo(ctx context.Context) (yubico.DeviceInfo, error) 
 			return yubico.DeviceInfo{}, err
 		}
 		if err := response.APDUError(); err != nil {
+			if response.Status == 0x6d00 {
+				err = fmt.Errorf("%w: %w", yubico.ErrDeviceInfoNotSupported, err)
+			}
 			return yubico.DeviceInfo{}, err
 		}
 
 		pages = append(pages, response.Data)
-		if more, ok, err := moreDeviceInfoPages(response.Data); err != nil {
+		more, err := moreDeviceInfoPages(response.Data)
+		if err != nil {
 			return yubico.DeviceInfo{}, err
-		} else if ok {
-			remainingPages = more
+		}
+		if !more {
+			break
+		}
+		if page == 255 {
+			return yubico.DeviceInfo{}, fmt.Errorf("%w: pagination exceeds page 255", yubico.ErrInvalidDeviceInfo)
 		}
 	}
 
 	return yubico.ParseDeviceInfoPages(pages...)
 }
 
-func moreDeviceInfoPages(data []byte) (byte, bool, error) {
+func moreDeviceInfoPages(data []byte) (bool, error) {
 	if len(data) == 0 || int(data[0]) != len(data)-1 {
-		return 0, false, yubico.ErrInvalidDeviceInfo
+		return false, yubico.ErrInvalidDeviceInfo
 	}
+	var more bool
 	for fields := data[1:]; len(fields) > 0; {
 		if len(fields) < 2 || int(fields[1]) > len(fields)-2 {
-			return 0, false, yubico.ErrInvalidDeviceInfo
+			return false, yubico.ErrInvalidDeviceInfo
 		}
 		tag, length := fields[0], int(fields[1])
 		value := fields[2 : 2+length]
 		fields = fields[2+length:]
 		if tag == 0x10 {
-			if len(value) != 1 {
-				return 0, false, yubico.ErrInvalidDeviceInfo
+			if len(value) != 1 || value[0] > 1 {
+				return false, yubico.ErrInvalidDeviceInfo
 			}
-			return value[0], true, nil
+			more = value[0] == 1
 		}
 	}
 
-	return 0, false, nil
+	return more, nil
 }

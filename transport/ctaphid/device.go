@@ -39,7 +39,7 @@ func Open(ctx context.Context, path string) (*Device, error) {
 
 // DeviceInfo reads Yubico device information.
 func (d *Device) DeviceInfo(ctx context.Context) (yubico.DeviceInfo, error) {
-	return GetDeviceInfo(ctx, d.transport)
+	return ReadDeviceInfo(ctx, d.transport)
 }
 
 // Close closes the underlying HID device.

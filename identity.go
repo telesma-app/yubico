@@ -1,32 +1,17 @@
 package yubico
 
-import (
-	"strconv"
-	"strings"
-)
+import "strings"
 
-// String formats a non-zero firmware version as major.minor.build.
-func (v FirmwareVersion) String() string {
-	if v == (FirmwareVersion{}) {
-		return ""
-	}
-
-	return strconv.Itoa(int(v.Major)) + "." +
-		strconv.Itoa(int(v.Minor)) + "." +
-		strconv.Itoa(int(v.Build))
-}
-
-// ModelName returns the canonical marketing name derived from Yubico device
-// information. fallback is returned for firmware generations whose naming
-// rules are not known.
-func (info DeviceInfo) ModelName(fallback string) string {
+// ModelName derives a product name; unknown firmware or form factors return false.
+// See https://developers.yubico.com/yubikey-manager/API_Documentation/_modules/yubikit/support.html#get_name
+func (info DeviceInfo) ModelName() (string, bool) {
 	version := info.EffectiveFirmwareVersion()
 	if isPreviewFirmware(version) {
-		return "YubiKey Preview"
+		return "YubiKey Preview", true
 	}
 
-	if version.Major != 5 || version.Minor < 1 {
-		return fallback
+	if version.Major != 5 || version.Minor < 1 || info.FormFactor < FormFactorUSBAKeychain || info.FormFactor > FormFactorUSBCBiometricKeychain {
+		return "", false
 	}
 
 	isNano := info.FormFactor == FormFactorUSBANano ||
@@ -72,15 +57,15 @@ func (info DeviceInfo) ModelName(fallback string) string {
 		case info.SupportedUSBCapabilities&CapabilityPIV != 0:
 			parts = append(parts, "- Multi-protocol Edition")
 		}
-	} else if info.IsSecurityKey && info.Serial != nil {
+	} else if info.IsSecurityKey && info.SerialNumber != nil {
 		parts = append(parts, "- Enterprise Edition")
-	} else if info.PinComplexity && !info.IsSecurityKey {
+	} else if info.PinComplexity != nil && *info.PinComplexity && !info.IsSecurityKey {
 		parts = append(parts, "- Enhanced PIN")
 	}
 
 	name := strings.Join(parts, " ")
 	name = strings.Replace(name, "5 C", "5C", 1)
-	return strings.Replace(name, "5 A", "5A", 1)
+	return strings.Replace(name, "5 A", "5A", 1), true
 }
 
 // HasNFC reports whether NFC capability data is valid for this form factor and
@@ -139,4 +124,12 @@ func isFIDOOnly(value Capability) bool {
 	fido := CapabilityU2F | CapabilityCTAP2
 
 	return value&nonFIDO == 0 && value&fido != 0
+}
+
+// EffectiveFirmwareVersion returns the alpha/beta qualifier's version or reported firmware.
+func (info DeviceInfo) EffectiveFirmwareVersion() FirmwareVersion {
+	if info.VersionQualifier != nil && (info.VersionQualifier.ReleaseType == ReleaseTypeAlpha || info.VersionQualifier.ReleaseType == ReleaseTypeBeta) {
+		return info.VersionQualifier.Version
+	}
+	return info.FirmwareVersion
 }

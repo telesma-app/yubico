@@ -3,7 +3,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/telesma-app/yubico.svg)](https://pkg.go.dev/github.com/telesma-app/yubico)
 [![Go](https://github.com/telesma-app/yubico/actions/workflows/go.yml/badge.svg)](https://github.com/telesma-app/yubico/actions/workflows/go.yml)
 
-Pure-Go support for Yubico management information and PIV extensions.
+Go library for Yubico management information and PIV extensions.
 Device information is available over PC/SC and CTAPHID.
 
 > [!WARNING]

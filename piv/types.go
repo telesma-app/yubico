@@ -102,7 +102,7 @@ type RetryCounts struct {
 // PublicKeyData borrow the response bytes.
 type Metadata struct {
 	Raw           []byte
-	Algorithm     protocol.Algorithm
+	Algorithm     *protocol.Algorithm
 	Policy        *KeyPolicy
 	Origin        *KeyOrigin
 	PublicKeyData []byte

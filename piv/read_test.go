@@ -144,7 +144,7 @@ func TestReadMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if metadata.Algorithm != 0xff || metadata.Default == nil || *metadata.Default || metadata.Retries == nil || *metadata.Retries != (RetryCounts{Total: 3, Remaining: 2}) {
+	if metadata.Algorithm == nil || *metadata.Algorithm != 0xff || metadata.Default == nil || *metadata.Default || metadata.Retries == nil || *metadata.Retries != (RetryCounts{Total: 3, Remaining: 2}) {
 		t.Errorf("metadata = %+v", metadata)
 	}
 

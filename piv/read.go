@@ -84,10 +84,15 @@ func Attest(ctx context.Context, transport VendorTransport, reference protocol.K
 // PublicKeyData is a PIV public-key template value, not X.509 SubjectPublicKeyInfo.
 // Supported algorithms match protocol.ParsePublicKey. Other algorithms remain
 // available in Algorithm and PublicKeyData even when this method cannot parse them.
+// Metadata without a reported algorithm cannot be parsed as a public key.
 func (metadata Metadata) PublicKey() (crypto.PublicKey, error) {
+	if metadata.Algorithm == nil {
+		return nil, fmt.Errorf("yubico piv: metadata does not report a public key algorithm")
+	}
+
 	data := append([]byte{0x7f}, appendTLV(nil, 0x49, metadata.PublicKeyData)...)
 
-	return protocol.ParsePublicKey(metadata.Algorithm, data)
+	return protocol.ParsePublicKey(*metadata.Algorithm, data)
 }
 
 func exchange(ctx context.Context, transport VendorTransport, command iso7816.Command) (iso7816.Response, error) {

@@ -21,7 +21,7 @@ func TestParseMetadataPublicKey(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if metadata.Algorithm != protocol.ECCP256 || metadata.Policy == nil || *metadata.Policy != (KeyPolicy{PIN: PINPolicyOnce, Touch: TouchPolicyNever}) || metadata.Origin == nil || *metadata.Origin != KeyOriginGenerated {
+	if metadata.Algorithm == nil || *metadata.Algorithm != protocol.ECCP256 || metadata.Policy == nil || *metadata.Policy != (KeyPolicy{PIN: PINPolicyOnce, Touch: TouchPolicyNever}) || metadata.Origin == nil || *metadata.Origin != KeyOriginGenerated {
 		t.Errorf("metadata = %+v", metadata)
 	}
 
@@ -57,7 +57,7 @@ func TestParseMetadataUnknownValues(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if metadata.Algorithm != 0xf0 || metadata.Policy == nil || metadata.Policy.PIN != 0xfe || metadata.Policy.Touch != 0xff || metadata.Origin == nil || *metadata.Origin != 0xfe {
+	if metadata.Algorithm == nil || *metadata.Algorithm != 0xf0 || metadata.Policy == nil || metadata.Policy.PIN != 0xfe || metadata.Policy.Touch != 0xff || metadata.Origin == nil || *metadata.Origin != 0xfe {
 		t.Errorf("unknown fields changed: %+v", metadata)
 	}
 
@@ -82,6 +82,55 @@ func TestParseMetadataAbsentOptionalFields(t *testing.T) {
 
 	if metadata.Policy != nil || metadata.Origin != nil || metadata.PublicKeyData != nil || metadata.Default != nil || metadata.Retries != nil {
 		t.Errorf("absent fields gained values: %+v", metadata)
+	}
+
+	if metadata.Algorithm == nil || *metadata.Algorithm != protocol.TripleDES {
+		t.Errorf("reported algorithm 03 lost: %v", metadata.Algorithm)
+	}
+}
+
+func TestParseMetadataZeroAlgorithm(t *testing.T) {
+	metadata, err := ParseMetadata([]byte{1, 1, 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if metadata.Algorithm == nil || *metadata.Algorithm != protocol.TripleDESLegacy {
+		t.Errorf("reported algorithm 00 lost: %v", metadata.Algorithm)
+	}
+}
+
+func TestParseMetadataEmptySlot(t *testing.T) {
+	// TOKEN2 R3.4 returns only this policy TLV for an empty asymmetric slot.
+	data := []byte{0x02, 0x02, 0x00, 0x00}
+
+	metadata, err := ParseMetadata(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if metadata.Algorithm != nil || metadata.Origin != nil || metadata.PublicKeyData != nil || metadata.Default != nil || metadata.Retries != nil {
+		t.Errorf("absent fields gained values: %+v", metadata)
+	}
+
+	if metadata.Policy == nil || *metadata.Policy != (KeyPolicy{}) || !bytes.Equal(metadata.Raw, data) {
+		t.Errorf("empty-slot metadata = %+v", metadata)
+	}
+
+	publicKey, err := metadata.PublicKey()
+	if publicKey != nil || err == nil || errors.Is(err, protocol.ErrInvalidResponse) {
+		t.Errorf("PublicKey = %v, %v, want unavailable algorithm without invalid metadata", publicKey, err)
+	}
+}
+
+func TestParseMetadataPINWithoutAlgorithm(t *testing.T) {
+	metadata, err := ParseMetadata([]byte{0x05, 0x01, 0x01, 0x06, 0x02, 0x03, 0x02})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if metadata.Algorithm != nil || metadata.Default == nil || !*metadata.Default || metadata.Retries == nil || *metadata.Retries != (RetryCounts{Total: 3, Remaining: 2}) {
+		t.Errorf("PIN metadata = %+v", metadata)
 	}
 }
 

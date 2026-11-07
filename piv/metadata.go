@@ -6,10 +6,15 @@ import (
 	"github.com/telesma-app/piv/protocol"
 )
 
-// ParseMetadata parses the GET METADATA TLV response. The algorithm is required;
-// other known fields are optional. Unknown fields are retained in Raw. Public-key
-// parsing is separate so a new algorithm does not prevent metadata inspection.
+// ParseMetadata parses a nonempty GET METADATA TLV response. Known fields are
+// optional: empty slots and authentication references may omit the algorithm.
+// Unknown fields are retained in Raw. Public-key parsing is separate so a new
+// algorithm does not prevent metadata inspection.
 func ParseMetadata(data []byte) (Metadata, error) {
+	if len(data) == 0 {
+		return Metadata{}, fmt.Errorf("%w: empty metadata", protocol.ErrInvalidResponse)
+	}
+
 	metadata := Metadata{Raw: data}
 
 	var seen byte
@@ -39,7 +44,8 @@ func ParseMetadata(data []byte) (Metadata, error) {
 				return Metadata{}, fmt.Errorf("%w: invalid metadata algorithm", protocol.ErrInvalidResponse)
 			}
 
-			metadata.Algorithm = protocol.Algorithm(value[0])
+			algorithm := protocol.Algorithm(value[0])
+			metadata.Algorithm = &algorithm
 		case 2:
 			if len(value) != 2 {
 				return Metadata{}, fmt.Errorf("%w: invalid metadata policy", protocol.ErrInvalidResponse)
@@ -69,10 +75,6 @@ func ParseMetadata(data []byte) (Metadata, error) {
 
 			metadata.Retries = &RetryCounts{Total: value[0], Remaining: value[1]}
 		}
-	}
-
-	if seen&(1<<1) == 0 {
-		return Metadata{}, fmt.Errorf("%w: missing metadata algorithm", protocol.ErrInvalidResponse)
 	}
 
 	return metadata, nil

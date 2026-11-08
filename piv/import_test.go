@@ -102,7 +102,7 @@ func TestImportRSAUsesFixedWidthCRTWithoutMutatingKey(t *testing.T) {
 }
 
 func TestImportRejectsUnsupportedCurveBeforeAuthentication(t *testing.T) {
-	key, err := ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
+	key, err := ecdsa.GenerateKey(elliptic.P224(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestImportRejectsUnsupportedCurveBeforeAuthentication(t *testing.T) {
 	transport := &commandTransport{}
 
 	if err := ImportKey(context.Background(), transport, protocol.DigitalSignature, key, KeyPolicy{}, card.AdministrationKey{}); err == nil {
-		t.Fatal("P-521 import succeeded")
+		t.Fatal("P-224 import succeeded")
 	}
 
 	if transport.calls != 0 {

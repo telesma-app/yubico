@@ -15,7 +15,8 @@ import (
 
 // GenerateKey replaces a slot's private key and returns its public key. Unlike
 // the standard command, it includes Yubico PIN and touch policies. Supported
-// algorithms are RSA-1024/2048/3072 and P-256/P-384. The certificate is unchanged.
+// algorithms are RSA-1024/2048/3072/4096, P-256/P-384/P-521, Ed25519 and X25519.
+// The certificate is unchanged. Availability depends on the card and firmware.
 //
 // Generating in AttestationKey permanently replaces the factory attestation
 // key. The original Yubico attestation capability cannot be restored by Reset.
@@ -30,7 +31,8 @@ func GenerateKey(
 	administrationKey card.AdministrationKey,
 ) (crypto.PublicKey, error) {
 	switch request.Algorithm {
-	case protocol.RSA1024, protocol.RSA2048, protocol.RSA3072, protocol.ECCP256, protocol.ECCP384:
+	case protocol.RSA1024, protocol.RSA2048, protocol.RSA3072, protocol.RSA4096,
+		protocol.ECCP256, protocol.ECCP384, protocol.ECCP521, protocol.Ed25519, protocol.X25519:
 	default:
 		return nil, fmt.Errorf("yubico piv: unsupported public key algorithm %02x", byte(request.Algorithm))
 	}

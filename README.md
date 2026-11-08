@@ -9,7 +9,7 @@ Device information is available over PC/SC and CTAPHID.
 > [!WARNING]
 > This module is under active development. Its public API may change during `v0.x`.
 
-## Support
+## Features
 
 - firmware, serial number, form factor, USB/NFC capabilities and FIPS information;
 - model identification from reported device information;
@@ -91,9 +91,9 @@ metadata and administration commands to that session.
 ## Development
 
 ```sh
-go test ./...
-go vet ./...
-golangci-lint run ./...
+GOWORK=off go test ./...
+GOWORK=off go vet ./...
+GOWORK=off golangci-lint run ./...
 ```
 
 The test suite does not require hardware.

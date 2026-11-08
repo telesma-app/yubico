@@ -3,7 +3,9 @@ package piv
 import (
 	"context"
 	"crypto"
+	"crypto/ecdh"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rsa"
 	"fmt"
@@ -15,9 +17,10 @@ import (
 )
 
 // ImportKey replaces a slot's private key without replacing its certificate.
-// Supported inputs are two-prime RSA-1024/2048/3072 keys with exponent 65537 and
-// ECDSA P-256/P-384 keys. PrivateKey is borrowed; its values and precomputed
-// fields are not modified. Temporary wire data is cleared after the exchange.
+// Supported inputs are two-prime RSA-1024/2048/3072/4096 keys with exponent 65537,
+// ECDSA P-256/P-384/P-521, Ed25519 and X25519 keys. PrivateKey is borrowed; its
+// values and precomputed fields are not modified. Temporary wire data is cleared
+// after the exchange.
 //
 // Importing into AttestationKey permanently replaces the factory attestation
 // key. The original Yubico attestation capability cannot be restored by Reset.
@@ -64,6 +67,8 @@ func encodePrivateKey(privateKey crypto.PrivateKey) (protocol.Algorithm, []byte,
 			algorithm = protocol.RSA2048
 		case 3072:
 			algorithm = protocol.RSA3072
+		case 4096:
+			algorithm = protocol.RSA4096
 		default:
 			return 0, nil, fmt.Errorf("yubico piv: unsupported RSA key size %d", key.N.BitLen())
 		}
@@ -104,6 +109,8 @@ func encodePrivateKey(privateKey crypto.PrivateKey) (protocol.Algorithm, []byte,
 			algorithm = protocol.ECCP256
 		case elliptic.P384():
 			algorithm = protocol.ECCP384
+		case elliptic.P521():
+			algorithm = protocol.ECCP521
 		default:
 			return 0, nil, fmt.Errorf("yubico piv: unsupported ECDSA curve %s", key.Curve.Params().Name)
 		}
@@ -116,6 +123,20 @@ func encodePrivateKey(privateKey crypto.PrivateKey) (protocol.Algorithm, []byte,
 		defer clear(encoded)
 
 		return algorithm, appendTLV(make([]byte, 0, len(encoded)+8), 0x06, encoded), nil
+	case ed25519.PrivateKey:
+		seed := key.Seed()
+		defer clear(seed)
+
+		return protocol.Ed25519, appendTLV(make([]byte, 0, len(seed)+8), 0x07, seed), nil
+	case *ecdh.PrivateKey:
+		if key.Curve() != ecdh.X25519() {
+			return 0, nil, fmt.Errorf("yubico piv: unsupported ECDH curve %s", key.Curve())
+		}
+
+		encoded := key.Bytes()
+		defer clear(encoded)
+
+		return protocol.X25519, appendTLV(make([]byte, 0, len(encoded)+8), 0x08, encoded), nil
 	default:
 		return 0, nil, fmt.Errorf("yubico piv: unsupported private key type %T", privateKey)
 	}

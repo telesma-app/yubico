@@ -7,9 +7,9 @@ tool golang.org/x/tools/cmd/stringer
 require (
 	github.com/telesma-app/ctap v0.53.0
 	github.com/telesma-app/hid v0.14.1
-	github.com/telesma-app/iso7816 v0.4.0
+	github.com/telesma-app/iso7816 v0.7.0
 	github.com/telesma-app/pcsc v0.10.0
-	github.com/telesma-app/piv v0.1.1
+	github.com/telesma-app/piv v0.4.0
 )
 
 require (
@@ -17,6 +17,7 @@ require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect
 	github.com/ebitengine/purego v0.11.3 // indirect
 	github.com/fxamacker/cbor/v2 v2.10.0 // indirect
+	github.com/telesma-app/bertlv v0.1.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/mod v0.42.0 // indirect
